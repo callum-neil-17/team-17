@@ -16,6 +16,7 @@ from levels.level1 import WIZARD
 
 SPELL = "1010011010100110"
 SPEED = 20.0  # Character cells per second, in both terminals.
+ENDING_SPEED = 25.0  # Slightly faster for the player's Level 11 spell.
 FRAME_TIME = 1 / 30
 PLAYER = PLAYER_POSES["ready"]
 STOP_X = PLAYER_WIDTH + 4
@@ -129,7 +130,8 @@ def draw_scene(role: str, size: tuple[int, int], status: str, note: str = "",
         put(line, 0, index + 2)
     art_top = max(1, len(heading) + 3) if heading else 1
     footer = (wrap(status, width) + wrap(note, width))[:min(4, rows - 2)]
-    floor = rows - len(footer) - 1
+    # Keep the characters anchored when there is no routine footer text.
+    floor = rows - max(1, len(footer)) - 1
     if role == "wizard":
         sprite = wizard_sprite(frame)
         # Keep the wand near the shared spell lane, including in tall windows.
@@ -221,6 +223,10 @@ class PlayerFight:
         self.cleanup_complete = False
         self.epilogue_cleared = False
 
+    @property
+    def spell_speed(self) -> float:
+        return ENDING_SPEED if self.level.number == 11 else SPEED
+
     def open_window(self) -> None:
         self.windows = WindowPair(self.port, self.token)
 
@@ -235,24 +241,35 @@ class PlayerFight:
                             "description": self.level.description})
 
     def begin_level(self, level) -> None:
-        """Cast the final spell using the existing peer and terminal windows."""
+        """Wait for the undo solution using the existing peer and windows."""
         self.level = level
         self.cast_id = 2
         self.undo_requested = False
         self.player_step = 0.0
         self._send_level()
-        self._cast(self.last_tick)
+        self._start_level(self.last_tick)
+
+    def _start_level(self, now: float) -> None:
+        if self.level.number == 11:
+            self.state = "awaiting_undo"
+            self.status = ""
+            self.player_x = STOP_X
+            if self.undo_requested:
+                self._launch_undo_spell()
+        else:
+            self._cast(now)
 
     def _cast(self, now: float) -> None:
         self.state = "wizard_spell"
-        self.status = "The wizard casts a spell..."
+        self.status = ""
         self.flight_started = now
         self.peer.send({"type": "cast", "id": self.cast_id, "glyph": SPELL,
-                        "row": self.row, "speed": SPEED})
+                        "row": self.row, "speed": self.spell_speed})
 
-    def _reverse(self) -> None:
+    def _launch_undo_spell(self) -> None:
+        self.player_x = STOP_X
         self.state = "return_player"
-        self.status = "Undo. The spell reverses!"
+        self.status = ""
 
     def _disconnect(self) -> None:
         if self.peer:
@@ -266,7 +283,7 @@ class PlayerFight:
 
     def _finish_wizard(self, now: float) -> None:
         self.state = "closing_wizard"
-        self.status = "The wizard has been defeated."
+        self.status = ""
         self.closing_started = now
         self._disconnect()
         if self.windows:
@@ -277,16 +294,16 @@ class PlayerFight:
 
     def handle_key(self, key: str | None) -> None:
         if (self.level.number == 11 and not self.undo_requested
-                and self.state in ("connecting", "preparing", "wizard_spell", "player_spell", "awaiting_undo")
+                and self.state in ("connecting", "preparing", "awaiting_undo")
                 and self.level.check_input(key)):
             self.undo_requested = True
-            if self.state in ("player_spell", "awaiting_undo"):
-                self._reverse()
+            if self.state == "awaiting_undo":
+                self._launch_undo_spell()
             return
         if self.state == "awaiting_dodge" and self.level.check_input(key):
             self.state = "dodging"
             self.dodge_started = self.last_tick
-            self.status = "You take a back step..."
+            self.status = ""
             try:
                 self.peer.send({"type": "dodge", "id": 1})
             except OSError as error:
@@ -314,12 +331,12 @@ class PlayerFight:
             self._layout()
         elif kind == "handoff" and self.state == "wizard_spell" and message.get("id") == self.cast_id:
             self.state = "player_spell"
-            self.status = "The spell crosses into your window..."
+            self.status = ""
             self.player_x = self.size[0] - 1
         elif kind == "impact" and self.state == "return_wizard" and message.get("id") == 2:
             self.state = "defeating"
             self.flight_started = now
-            self.status = "The wizard's spell turns against him."
+            self.status = ""
         elif kind == "death_complete" and self.state == "defeating" and message.get("id") == 2:
             self._finish_wizard(now)
         elif kind == "closed":
@@ -388,7 +405,7 @@ class PlayerFight:
                 return
             if (self.state == "preparing" and self.wizard_ready and self.layout_ready
                     and now >= self.settle_until):
-                self._cast(now)
+                self._start_level(now)
             if self.state in ("connecting", "preparing") and now - self.started > 20:
                 raise ConnectionError("The wizard window did not connect in time.")
             if self.state not in ("connecting", "preparing") and now - self.last_seen > 10:
@@ -400,15 +417,13 @@ class PlayerFight:
             if self.state == "defeating" and now - self.flight_started > 15:
                 raise ConnectionError("The wizard's final animation stopped responding.")
             if self.state == "player_spell":
-                self.player_x -= SPEED * elapsed
+                self.player_x -= self.spell_speed * elapsed
                 if self.player_x <= STOP_X:
                     self.player_x = STOP_X
-                    self.state = "awaiting_undo" if self.level.number == 11 else "awaiting_dodge"
-                    self.status = "The spell hangs in the air."
-                    if self.level.number == 11 and self.undo_requested:
-                        self._reverse()
+                    self.state = "awaiting_dodge"
+                    self.status = ""
             elif self.state == "return_player":
-                self.player_x += SPEED * elapsed
+                self.player_x += self.spell_speed * elapsed
                 if self.player_x >= self.size[0] - 1:
                     self.state = "return_wizard"
                     self.flight_started = now
@@ -418,14 +433,14 @@ class PlayerFight:
                         sys.stdout.write(self.render())
                         sys.stdout.flush()
                     self.peer.send({"type": "return", "id": 2, "glyph": SPELL[::-1],
-                                    "row": self.row, "speed": SPEED})
+                                    "row": self.row, "speed": self.spell_speed})
             if self.state == "dodging":
                 self.player_step = min(1.0, (now - self.dodge_started) / DODGE_TIME)
                 if self.player_step >= 1:
-                    self.player_x -= SPEED * elapsed
+                    self.player_x -= self.spell_speed * elapsed
                 if self.player_x <= -len(SPELL):
                     self.state = "complete"
-                    self.status = "Spell dodged."
+                    self.status = ""
                     self.peer.send({"type": "missed", "id": 1})
         except (OSError, ConnectionError) as error:
             self.fail(str(error))
@@ -441,7 +456,7 @@ class PlayerFight:
             self.epilogue_cleared = True
             return output
         pose = "ready"
-        if self.state in ("player_spell", "awaiting_undo", "return_player", "return_wizard", "dodging"):
+        if self.state in ("player_spell", "dodging"):
             pose = "recoil"
         if self.state in ("defeating", "closing_wizard"):
             pose = "victory"
@@ -451,7 +466,7 @@ class PlayerFight:
         if self.state == "dodging":
             visible_row -= round((PLAYER_HAND_ROW + 1) * self.player_step)
         return draw_scene("player", self.size, self.status, self.note,
-                          x=self.player_x if self.state in ("player_spell", "awaiting_dodge", "dodging", "awaiting_undo", "return_player") else None,
+                          x=self.player_x if self.state in ("player_spell", "awaiting_dodge", "dodging", "return_player") else None,
                           row=self.row, level_number=self.level.number,
                           description=self.level.prompt, player_step=self.player_step,
                           glyph=SPELL[::-1] if self.state == "return_player" else SPELL, pose=pose,

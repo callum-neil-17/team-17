@@ -71,12 +71,15 @@ python3.12 game.py --fight
 ```
 
 After the spell misses, the game automatically advances to Level 11 using the same two windows
-and socket connection. The wizard casts a final spell and the player sees
-"There's no taking this one back!" Ctrl+Z (`\x1a`) undoes it. One press is enough:
-if pressed before the spell arrives, the input is remembered; repeated presses
-cannot start overlapping endings. The reversed binary stream travels right
-through the player window, then enters the wizard window from the left and
-strikes him. Both parts animate locally, using socket handoff events.
+and socket connection. The wizard waits without casting another projectile.
+The clue is "Find a way to undo the wizard's spell trapping you in the
+terminal." Ctrl+Z (`\x1a`) undoes the trapping spell and launches a green binary
+stream from the player toward the wizard. One press is enough; an early press
+is remembered until both windows are ready, and repeated presses cannot start
+overlapping endings. The stream travels right through the player window, then
+enters the wizard window from the left and strikes him. Both parts animate
+locally, using socket handoff events. Routine spell-travel messages are hidden;
+the level clue remains above the artwork.
 
 The wizard's eight-second death sequence includes impact particles and a brief
 amber flash, recoil, corrupted and missing body sections, falling fragments,
@@ -95,7 +98,7 @@ To test just Level 11 and its ending in an existing shell:
 python3.12 game.py --ending
 ```
 
-Press Ctrl+Z once, watch the reversal and death sequence, then press Escape.
+Press Ctrl+Z once to send the spell, watch the death sequence, then press Escape.
 Direct execution returns to that shell and never closes its terminal window.
 To also test launcher-owned player-window closure:
 

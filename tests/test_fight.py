@@ -104,6 +104,7 @@ class FightTests(unittest.TestCase):
         self.session.tick()
         self.assertEqual(self.session.state, 'player_spell')
         self.assertGreater(self.session.player_x, 58)
+        self.assertNotIn('The spell crosses', self.session.render())
         self.session.tick(self.session.last_tick + 3)
         self.assertEqual(self.session.state, 'awaiting_dodge')
         self.assertEqual(self.session.player_x, fight.STOP_X)
@@ -149,14 +150,14 @@ class FightTests(unittest.TestCase):
         self.session.tick(self.session.last_tick + 3)
         connection, port, token = self.session.peer, self.session.port, self.session.token
         self.session.begin_level(Level11())
-        self.assertEqual(self.session.state, 'wizard_spell')
+        self.assertEqual(self.session.state, 'awaiting_undo')
         self.assertIs(self.session.peer, connection)
         self.assertEqual((self.session.port, self.session.token), (port, token))
         self.assertIn('Level 11 - Player', self.session.render())
         messages = peer.poll()
         self.assertIn({'type': 'level', 'number': 11, 'description': Level11().description}, messages)
-        self.assertIn({'type': 'cast', 'id': 2, 'glyph': fight.SPELL,
-                       'row': self.session.row, 'speed': fight.SPEED}, messages)
+        self.assertFalse(any(message['type'] == 'cast' for message in messages))
+        self.assertNotIn(fight.SPELL, self.session.render())
 
     def test_closed_wizard_and_timeout(self):
         peer = self.connect()
@@ -232,6 +233,7 @@ class FightTests(unittest.TestCase):
             self.assertTrue({'wizard_spell', 'player_spell', 'awaiting_dodge', 'dodging', 'complete'} <= states)
             self.assertIn(b'Level 10 - Wizard', output)
             self.assertIn(fight.SPELL.encode(), output)
+            self.assertNotIn(b'The spell is entering', output)
             self.session.begin_level(Level11())
             deadline = time.monotonic() + 2
             while b'Level 11 - Wizard' not in output and time.monotonic() < deadline:

@@ -58,19 +58,18 @@ class EndingFightTests(unittest.TestCase):
         self.assertTrue(any(message["type"] == "layout" for message in messages))
         peer.send({"type": "ready"})
         self.session.tick()
-        cast = next(message for message in peer.poll() if message["type"] == "cast")
-        self.assertEqual(cast["id"], 2)
-        self.assertEqual(cast["glyph"], fight.SPELL)
-        self.assertEqual(self.session.state, "wizard_spell")
+        self.assertFalse(any(message["type"] == "cast" for message in peer.poll()))
+        self.assertEqual(self.session.state, "awaiting_undo")
+        self.assertNotIn(fight.SPELL, self.session.render())
+        self.assertIn("Find a way to undo the wizard's spell", self.session.render())
         return peer
 
     def wait_for_undo(self, peer):
-        peer.send({"type": "handoff", "id": 2})
-        self.session.tick()
-        self.assertEqual(self.session.state, "player_spell")
         self.session.tick(self.session.last_tick + 4)
         self.assertEqual(self.session.state, "awaiting_undo")
         self.assertEqual(self.session.player_x, fight.STOP_X)
+        self.assertNotIn(fight.SPELL, self.session.render())
+        self.assertFalse(any(message["type"] == "cast" for message in peer.poll()))
 
     def return_spell(self, peer):
         self.wait_for_undo(peer)
@@ -81,9 +80,9 @@ class EndingFightTests(unittest.TestCase):
         messages = peer.poll()
         returns = [message for message in messages if message["type"] == "return"]
         self.assertEqual(returns, [{"type": "return", "id": 2, "glyph": fight.SPELL[::-1],
-                                    "row": self.session.row, "speed": fight.SPEED}])
+                                    "row": self.session.row, "speed": fight.ENDING_SPEED}])
 
-    def test_one_ctrl_z_returns_spell_and_finishes_without_more_input(self):
+    def test_one_ctrl_z_launches_spell_and_finishes_without_more_input(self):
         peer = self.connect()
         self.return_spell(peer)
         for key in ("\x1a", "\x1a", "\r", "q", None):
@@ -105,26 +104,30 @@ class EndingFightTests(unittest.TestCase):
         self.session.handle_key("\x1a")
         self.assertEqual(self.session.state, "epilogue")
 
-    def test_early_ctrl_z_is_latched_until_the_spell_reaches_player(self):
-        peer = self.connect()
+    def test_early_ctrl_z_launches_once_when_the_windows_are_ready(self):
+        peer = fight.JsonPeer(socket.create_connection(("127.0.0.1", self.session.port)))
+        self.addCleanup(peer.close)
         for _ in range(4):
             self.session.handle_key("\x1a")
-        self.assertEqual(self.session.state, "wizard_spell")
-        peer.send({"type": "handoff", "id": 2})
+        self.assertEqual(self.session.state, "connecting")
+        peer.send({"type": "hello", "token": self.session.token, "columns": 50, "rows": 28})
         self.session.tick()
-        self.assertEqual(self.session.state, "player_spell")
-        self.session.tick(self.session.last_tick + 4)
+        peer.poll()
+        peer.send({"type": "ready"})
+        self.session.tick()
         self.assertEqual(self.session.state, "return_player")
-        self.assertEqual(self.session.player_x, fight.STOP_X)
+        self.assertGreaterEqual(self.session.player_x, fight.STOP_X)
         self.session.tick(self.session.last_tick + 4)
         messages = peer.poll()
+        self.assertFalse(any(message["type"] == "cast" for message in messages))
         self.assertEqual(sum(message["type"] == "return" for message in messages), 1)
 
     def test_only_ctrl_z_solves_the_undo_puzzle_and_old_spell_events_are_ignored(self):
         peer = self.connect()
         peer.send({"type": "handoff", "id": 1})
+        peer.send({"type": "handoff", "id": 2})
         self.session.tick()
-        self.assertEqual(self.session.state, "wizard_spell")
+        self.assertEqual(self.session.state, "awaiting_undo")
         self.wait_for_undo(peer)
         for key in ("\r", "\n", "z", "Z", "q", "\x03", "\x7f", None):
             self.session.handle_key(key)
@@ -202,8 +205,9 @@ class EndingFightTests(unittest.TestCase):
             drain_terminal(master, output)
             self.assertEqual(self.session.state, "epilogue", self.session.status)
             self.assertTrue(solved)
-            self.assertTrue({"wizard_spell", "player_spell", "awaiting_undo", "return_player",
+            self.assertTrue({"awaiting_undo", "return_player",
                              "return_wizard", "defeating", "epilogue"} <= states | {self.session.state})
+            self.assertTrue({"wizard_spell", "player_spell"}.isdisjoint(states))
             self.assertIsNotNone(death_started)
             self.assertGreaterEqual(death_finished - death_started, 6)
             self.assertLess(death_finished - death_started, 12)
@@ -213,6 +217,8 @@ class EndingFightTests(unittest.TestCase):
                 self.assertIn(message, output)
             self.assertIn(b"Level 11 - Wizard", output)
             self.assertIn(fight.SPELL[::-1].encode("ascii"), output)
+            self.assertNotIn(b"The spell is entering", output)
+            self.assertNotIn(b"The spell has been undone", output)
             self.assertNotIn(b"Traceback", output)
             self.assertIsNone(self.session.peer)
             process.wait(timeout=3)

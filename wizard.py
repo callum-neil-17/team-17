@@ -51,19 +51,20 @@ def run(port: int, token: str) -> None:
                     note = str(message["note"])
                     if state == "waiting":
                         state, ready_pending = "ready", True
-                elif kind == "cast" and state == "ready":
+                elif kind == "cast" and state == "ready" and level_number == 10:
                     cast_id = message["id"]
                     glyph, row, speed = message["glyph"], int(message["row"]), float(message["speed"])
                     x = float(max(0, wizard_left(size[0]) - len(glyph)))
-                    status, state = "The wizard casts a spell...", "casting"
+                    status, state = "", "casting"
                 elif kind == "dodge":
-                    status = "The player takes a back step..."
+                    status = ""
                 elif kind == "missed":
-                    status = "The spell misses!"
-                elif (kind == "return" and level_number == 11 and state == "handed_off"
-                      and message.get("id") == cast_id == 2):
+                    status = ""
+                elif (kind == "return" and level_number == 11 and state == "ready"
+                      and message.get("id") == 2):
+                    cast_id = 2
                     glyph, row, speed = message["glyph"], int(message["row"]), float(message["speed"])
-                    state, status, x = "returning", "The spell has been undone...", -float(len(glyph))
+                    state, status, x = "returning", "", -float(len(glyph))
             if peer.eof or now - last_seen > 12:
                 return
             current_size = terminal_size()
@@ -76,7 +77,7 @@ def run(port: int, token: str) -> None:
                 x -= speed * elapsed
                 if x <= -len(glyph):
                     x = None
-                    state, status = "handed_off", "The spell is entering the player's window..."
+                    state, status = "handed_off", ""
                     # Draw the empty edge BEFORE sending the handoff event.
                     sys.stdout.write(draw_scene("wizard", size, status, note,
                                                 frame=int((now - started) / 0.35), row=row,
@@ -100,7 +101,8 @@ def run(port: int, token: str) -> None:
                 time.sleep(FRAME_TIME)
                 continue
             sys.stdout.write(draw_scene("wizard", size, status, note,
-                                        frame=int((now - started) / 0.35), x=x, row=row, glyph=glyph,
+                                        frame=0 if level_number == 11 and state == "ready" else int((now - started) / 0.35),
+                                        x=x, row=row, glyph=glyph,
                                         level_number=level_number, description=description))
             sys.stdout.flush()
             if ready_pending:
