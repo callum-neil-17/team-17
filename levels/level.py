@@ -5,7 +5,7 @@ class Level:
         title: str,
         required_input: tuple[str, ...],
         art: str | list[str] = "",
-        prompt: str = "Press Enter to continue.",
+        prompt: str = "",
     ) -> None:
         self.number = number
         self.title = title
