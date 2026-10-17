@@ -256,6 +256,37 @@ class FightTests(unittest.TestCase):
 
 
 class IntegrationTests(unittest.TestCase):
+    def test_intro_stars_animate_while_waiting_and_input_stays_responsive(self):
+        clock = [0.0]
+        # Include ignored keys between idle refreshes, then solve the intro.
+        inputs = iter([(0.4, None), (0.2, 'q'), (0.2, '\x03'),
+                       (0.4, None), (0.01, 'y'), (0.0, '')])
+
+        def read_key(fd, timeout=None):
+            elapsed, key = next(inputs)
+            clock[0] += elapsed
+            return key
+
+        with patch.object(game.termios, 'tcgetattr', return_value='original'), \
+             patch.object(game.termios, 'tcsetattr') as restore, \
+             patch.object(game.tty, 'setraw'), \
+             patch.object(game.time, 'monotonic', side_effect=lambda: clock[0]), \
+             patch.object(game, 'read_key', side_effect=read_key) as read, \
+             patch.object(game, 'play_frames', return_value=True) as frames, \
+             patch.object(game, 'render_screen') as render, \
+             contextlib.redirect_stdout(io.StringIO()):
+            game.main()
+
+        intro = [call.args[0] for call in render.call_args_list if 'Level 1\r\n' in call.args[0]]
+        self.assertGreaterEqual(len(set(intro)), 3)
+        frames.assert_called_once()
+        self.assertEqual(frames.call_args.args[0].number, 1)
+        self.assertIn('Level 2', render.call_args.args[0])
+        self.assertEqual(read.call_count, 6)
+        self.assertTrue(all(0 < call.kwargs['timeout'] <= 0.400001 for call in read.call_args_list[:-1]))
+        self.assertIsNone(read.call_args.kwargs['timeout'])
+        restore.assert_called_once()
+
     def test_earlier_progression_enters_fight_after_tree(self):
         keys = ['y', '\r', '\t', '\x12', game.Level5().required_input[0], '\x17', '\x06', '.', '\x18']
         output = io.StringIO()

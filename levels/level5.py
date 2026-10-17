@@ -8,7 +8,7 @@ ATM_FRAMES = [
 |------------------------------|
 |    +--------------------+    |
 |    |                    |    |
-|    |         q          |    |
+|    |         c          |    |
 |    |                    |    |
 |    +--------------------+    |
 |                              |
@@ -25,7 +25,7 @@ ATM_FRAMES = [
 |------------------------------|
 |    +--------------------+    |
 |    |                    |    |
-|    |         Q          |    |
+|    |         C          |    |
 |    |                    |    |
 |    +--------------------+    |
 |                              |
@@ -78,7 +78,7 @@ class Level5(Level):
         super().__init__(
             number=5,
             title="Level 5",
-            required_input=("Q",),
+            required_input=("C",),
             art=ATM_FRAMES,
             description="You need some money to pay the tab, so you head to an ATM.",
             prompt="Broke? Raise some capital.",

@@ -28,6 +28,10 @@ Control keys can be puzzle input: Ctrl+Z solves Level 11 without suspending the
 process. The final epilogue waits for Escape. Level 12 remains available as a
 template file, but the finished wizard fight leads directly to the epilogue.
 
+Level 1 has a gently blinking star field around the wizard while it waits for
+input. Star positions stay fixed and their brightness changes every 0.4 seconds.
+The wizard artwork shared with the final fight stays the same.
+
 On Level 2, Enter plays the door-opening frames once before advancing. Input is
 ignored while the door opens. Frame playback and timing are handled in
 `game.py`; the drawings are stored in `levels/level2.py`.
@@ -45,9 +49,11 @@ Level 5 is the Bank of Cache ATM puzzle, with frames stored in
 `levels/level5.py`. Solving it raises the displayed lowercase letter to a
 capital, holds that frame for 3 seconds, then advances to Level 6.
 
-Level 6 closes the bill with a cheque that gets ticked off before Level 7.
-Its frames and text are in `levels/level6.py`. The checked cheque stays visible
-for 3 seconds before advancing.
+Level 6 returns to the same bar as Level 3. Ctrl+W makes the player hand over
+100 credits, then the bartender marks the balance paid and closes the tab.
+Its payment frames and text are in `levels/level6.py`; they reuse Level 3's
+bar artwork. The finished scene stays visible for 1.2 seconds before advancing
+automatically to Level 7. The whole payment animation takes about 2.45 seconds.
 
 Level 7 shows a Memory Management Unit (MMU) book lying on a table. Its artwork
 is stored in `BOOK_FRAMES` in `levels/level7.py`. Ctrl+F opens the book and

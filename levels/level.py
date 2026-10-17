@@ -19,6 +19,9 @@ class Level:
         self.frame_delay = 0.7
         # A level can hold selected frames longer than its normal animation.
         self.frame_delays: dict[int, float] = {}
+        # Opt in to background animation while waiting for puzzle input.
+        self.idle_frame = 0
+        self.idle_frame_delay: float | None = None
         self.layout = "center"
 
     def art(self, frame: int) -> str:

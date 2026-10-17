@@ -207,13 +207,23 @@ def main(start_fight: bool = False, start_ending: bool = False,
         sys.stdout.flush()
         if not isinstance(levels[level_index], Level10):
             render_screen(levels[level_index].render(), levels[level_index].layout)
+        next_idle_frame = time.monotonic() + (levels[level_index].idle_frame_delay or 0)
 
         while True:
             if level_index < len(levels) and isinstance(levels[level_index], Level10):
                 play_fight(fd, start_level=11 if start_ending else 10, window_token=window_token)
                 # The separate epilogue accepts Escape before returning here.
                 break
-            key = read_key(fd)
+            level = levels[level_index] if level_index < len(levels) else None
+            timeout = None
+            if level is not None and level.idle_frame_delay is not None:
+                now = time.monotonic()
+                if now >= next_idle_frame:
+                    level.idle_frame += 1
+                    render_screen(level.render(), level.layout)
+                    next_idle_frame = now + level.idle_frame_delay
+                timeout = max(0.0, next_idle_frame - time.monotonic())
+            key = read_key(fd, timeout=timeout)
 
             # EOF means the terminal disconnected, not that Ctrl+D was pressed.
             if key == "":
@@ -235,6 +245,8 @@ def main(start_fight: bool = False, start_ending: bool = False,
                 if not play_frames(levels[level_index], fd):
                     break
                 level_index += 1
+                if level_index < len(levels):
+                    next_idle_frame = time.monotonic() + (levels[level_index].idle_frame_delay or 0)
                 if level_index < len(levels) and not isinstance(levels[level_index], Level10):
                     render_screen(levels[level_index].render(), levels[level_index].layout)
                 elif level_index == len(levels):

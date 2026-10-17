@@ -15,8 +15,8 @@ from levels.level1 import WIZARD
 
 
 SPELL = "1010011010100110"
-SPEED = 20.0  # Character cells per second, in both terminals.
-ENDING_SPEED = 25.0  # Slightly faster for the player's Level 11 spell.
+SPEED = 40.0  # Level 10: character cells per second in both terminals.
+ENDING_SPEED = 50.0  # Slightly faster for the player's Level 11 spell.
 FRAME_TIME = 1 / 30
 PLAYER = PLAYER_POSES["ready"]
 STOP_X = PLAYER_WIDTH + 4
