@@ -203,6 +203,9 @@ def main(start_fight: bool = False, start_ending: bool = False,
 
     try:
         tty.setraw(fd)
+        # Keep game frames out of the shell's screen and scrollback history.
+        sys.stdout.write("\x1b[?1049h\x1b[?25l")
+        sys.stdout.flush()
         if not isinstance(levels[level_index], Level10):
             render_screen(levels[level_index].render(), levels[level_index].layout)
 
@@ -255,7 +258,7 @@ def main(start_fight: bool = False, start_ending: bool = False,
             # There is nothing left to restore if the terminal was disconnected.
             pass
         try:
-            sys.stdout.write("\x1b[0m\x1b[?25h\x1b[2J\x1b[H")
+            sys.stdout.write("\x1b[0m\x1b[?1049l\x1b[?25h")
             if not owned_window:
                 sys.stdout.write("\x1b]0;Two Keys\x07")
             sys.stdout.flush()

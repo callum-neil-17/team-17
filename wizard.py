@@ -14,7 +14,7 @@ from fight_effects import DEATH_DURATION, render_death
 def run(port: int, token: str) -> None:
     peer = None
     try:
-        sys.stdout.write(f"\x1b]0;Two Keys Wizard {token}\x07\x1b[2J\x1b[H")
+        sys.stdout.write(f"\x1b[?1049h\x1b[?25l\x1b]0;Two Keys Wizard {token}\x07\x1b[2J\x1b[H")
         sys.stdout.flush()
         sock = socket.create_connection(("127.0.0.1", port), timeout=5)
         peer = JsonPeer(sock)
@@ -119,7 +119,7 @@ def run(port: int, token: str) -> None:
         if peer:
             peer.close()
         try:
-            sys.stdout.write("\x1b[?25h\x1b[0m")
+            sys.stdout.write("\x1b[0m\x1b[?1049l\x1b[?25h")
             sys.stdout.flush()
         except OSError:
             pass

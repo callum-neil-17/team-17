@@ -119,6 +119,10 @@ window cannot connect, stops responding or is closed, the player can press
 Enter to retry. Closing the player window disconnects the wizard and ends it.
 Raw mode is enabled once in `game.py` and restored in `finally`, including on
 exceptions or termination signals. The wizard does not change terminal modes.
+Both windows use the terminal's alternate screen so game frames do not build
+up in scrollback. On exit, including after errors, the previous screen and
+visible cursor are restored. Terminal-app scrolling shortcuts may still depend
+on the terminal's own settings.
 
 Window positioning is best effort and never replaces the two actual windows:
 

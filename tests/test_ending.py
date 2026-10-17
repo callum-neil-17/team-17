@@ -222,7 +222,10 @@ class EndingFightTests(unittest.TestCase):
             self.assertNotIn(b"Traceback", output)
             self.assertIsNone(self.session.peer)
             process.wait(timeout=3)
+            drain_terminal(master, output)
             self.assertEqual(process.returncode, 0)
+            self.assertLess(output.index(b'\x1b[?1049h'), output.index(b'\x1b[?1049l'))
+            self.assertTrue(output.endswith(b'\x1b[?25h'))
             self.assertIn("There's only one way to leave the terminal.", self.session.render())
         finally:
             self.session.close()

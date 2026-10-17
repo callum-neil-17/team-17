@@ -258,28 +258,38 @@ class FightTests(unittest.TestCase):
 class IntegrationTests(unittest.TestCase):
     def test_earlier_progression_enters_fight_after_tree(self):
         keys = ['y', '\r', '\t', '\x12', game.Level5().required_input[0], '\x17', '\x06', '.', '\x18']
+        output = io.StringIO()
         with patch.object(game.termios, 'tcgetattr', return_value='original'), \
              patch.object(game.termios, 'tcsetattr') as restore, \
              patch.object(game.tty, 'setraw') as raw, \
              patch.object(game, 'read_key', side_effect=keys), \
              patch.object(game, 'play_frames', return_value=True) as frames, \
              patch.object(game, 'play_fight', return_value=True) as demo, \
-             patch.object(game, 'render_screen') as render:
+             patch.object(game, 'render_screen') as render, \
+             contextlib.redirect_stdout(output):
             game.main()
         demo.assert_called_once()
         self.assertEqual([call.args[0].number for call in frames.call_args_list], list(range(1, 10)))
         self.assertIn('Level 9', render.call_args.args[0])
         raw.assert_called_once()
         restore.assert_called_once_with(game.sys.stdin.fileno(), termios.TCSADRAIN, 'original')
+        self.assertLess(output.getvalue().index('\x1b[?1049h'),
+                        output.getvalue().index('\x1b[?1049l'))
+        self.assertIn('\x1b[?25h', output.getvalue())
 
     def test_raw_settings_restored_after_fight_exception(self):
+        output = io.StringIO()
         with patch.object(game.termios, 'tcgetattr', return_value='original'), \
              patch.object(game.termios, 'tcsetattr') as restore, \
              patch.object(game.tty, 'setraw'), \
-             patch.object(game, 'play_fight', side_effect=RuntimeError('test failure')):
+             patch.object(game, 'play_fight', side_effect=RuntimeError('test failure')), \
+             contextlib.redirect_stdout(output):
             with self.assertRaises(RuntimeError):
                 game.main(start_fight=True)
         restore.assert_called_once_with(game.sys.stdin.fileno(), termios.TCSADRAIN, 'original')
+        self.assertLess(output.getvalue().index('\x1b[?1049h'),
+                        output.getvalue().index('\x1b[?1049l'))
+        self.assertIn('\x1b[?25h', output.getvalue())
 
     def test_disconnected_player_terminal_exits_and_restores_settings(self):
         with patch.object(game.termios, 'tcgetattr', return_value='original'), \
