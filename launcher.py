@@ -19,7 +19,7 @@ if system == "Windows":
         )
 
     # Open a new fullscreen window running Ubuntu's Python environment.
-    subprocess.Popen(
+    subprocess.run(
         [
             terminal,
             "--window", "new",
