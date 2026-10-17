@@ -37,7 +37,7 @@ if system == "Windows":
 elif system == "Linux" and "microsoft" in platform.release().lower():
     # WSL: open a native Windows console that runs the game back inside WSL.
     distro = os.environ.get("WSL_DISTRO_NAME", "Ubuntu")
-    subprocess.Popen(
+    subprocess.run(
         [
             "cmd.exe", "/c", "start", "Two Keys",
             "wsl.exe",
@@ -47,6 +47,7 @@ elif system == "Linux" and "microsoft" in platform.release().lower():
             "game.py",
         ],
         cwd="/mnt/c",  # avoids cmd.exe's "UNC paths are not supported" warning
+        stdin=subprocess.DEVNULL,  # stops WSL interop reading this terminal (EIO)
     )
 
 elif system == "Linux":
