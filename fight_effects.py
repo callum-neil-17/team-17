@@ -229,3 +229,108 @@ def render_death(size: tuple[int, int], elapsed: float, *, color: bool = True,
         if color and active != "normal":
             output.append(_RESET)
     return "".join(output)
+
+
+def render_terminal_collapse(size: tuple[int, int], elapsed: float, *,
+                             color: bool = True, clear: bool = True) -> str:
+    """Crumble the final screen around its protected exit clue at 12 FPS.
+
+    Time is supplied by the game loop; no sleeps, terminal modes or real errors
+    are involved. A bounded canvas remains centred even on very large screens.
+    """
+    columns, rows = max(1, size[0]), max(1, size[1])
+    width, height = max(1, min(239, columns - 1)), min(80, rows)
+    left, top = max(0, (columns - 1 - width) // 2), (rows - height) // 2
+    tick = int(max(0.0, elapsed) * 12)
+    elapsed = tick / 12
+    progress = min(1.0, elapsed / 5)
+    canvas = [[" "] * width for _ in range(height)]
+
+    def put(text: str, x: int, y: int) -> None:
+        if 0 <= y < height:
+            for offset, char in enumerate(text):
+                if 0 <= x + offset < width:
+                    canvas[y][x + offset] = char
+
+    def fragment(char: str, x: int, y: int, group: int) -> None:
+        delay = 0.8 + (_noise(group, y // 3) % 4500) / 1000
+        age = max(0.0, elapsed - delay)
+        if age < 2.0:
+            drift = round(age * (_noise(group, 1) % 3 - 1))
+            fall = int(age * age * max(4, height / 3))
+            put(char, x + drift, y + fall)
+
+    # A terminal-shaped frame loses short sections rather than vanishing at once.
+    if width >= 14 and height >= 8:
+        for x in range(1, width - 1):
+            char = "+" if x in (1, width - 2) else "-"
+            fragment(char, x, 1, x // 5)
+            fragment(char, x, height - 2, 100 + x // 5)
+        for y in range(2, height - 2):
+            fragment("|", 1, y, 200 + y // 3)
+            fragment("|", width - 2, y, 300 + y // 3)
+
+    # Cracks spread inward, then slip down and out of the screen.
+    crack_length = int(min(height // 2, width // 4) * progress)
+    crack_fall = int(max(0.0, elapsed - 4) ** 2 * 2)
+    for side in (0, 1):
+        for step in range(crack_length):
+            x = 3 + step * 2
+            x = x if side == 0 else width - 1 - x
+            y = 2 + step + crack_fall
+            put("/" if (step + side) % 3 else "\\", x, y)
+            if step % 3 == 0:
+                put("--", x - 1, y + 1)
+
+    # Small, staggered streams continue falling until the player escapes.
+    scraps = ("01", "1010", "{}", "[]", "//", "_", "#%", "\\|/", "==", "+")
+    for index in range(min(72, max(8, width // 2))):
+        delay = 0.5 + (_noise(index, 4) % 3000) / 1000
+        if elapsed < delay:
+            continue
+        age = (elapsed - delay) % 4.5
+        cycle = int((elapsed - delay) / 4.5)
+        seed = _noise(index, cycle, 19)
+        x = seed % width + round(age * (seed % 3 - 1))
+        y = int((seed % max(1, height // 4)) + age * (2 + seed % 4) + age * age * 2)
+        put(scraps[seed % len(scraps)], x, y)
+
+    # A sparse heap remains at the bottom after the frame breaks apart.
+    for x in range(width):
+        seed = _noise(x, 7)
+        if seed % 100 < progress * 45:
+            y = height - 1 - seed % min(2, height)
+            put("_./\\#01"[(seed + tick // 12) % 7], x, y)
+
+    message = "There's only one way to leave the terminal."
+    lines = wrap(message, max(1, width - 6))[:height]
+    if len(lines) < height:
+        lines.append("_" if int(elapsed / 0.65) % 2 == 0 else " ")
+    message_top = max(0, (height - len(lines)) // 2)
+    message_width = max(map(len, lines), default=1)
+    # Clear a quiet area so falling debris never obscures the clue or cursor.
+    quiet_left = max(0, (width - message_width) // 2 - 3)
+    quiet_right = min(width, (width + message_width) // 2 + 4)
+    for y in range(max(0, message_top - 1), min(height, message_top + len(lines) + 1)):
+        canvas[y][quiet_left:quiet_right] = " " * (quiet_right - quiet_left)
+    bright = {}
+    for offset, line in enumerate(lines):
+        x, y = max(0, (width - len(line)) // 2), message_top + offset
+        put(line, x, y)
+        bright[y] = (x, x + len(line))
+
+    dim = "\x1b[2;36m"
+    output = ["\x1b[?25l"]
+    if clear:
+        output.append("\x1b[2J\x1b[H")
+    if color:
+        output.append(_RESET + dim)
+    for y, cells in enumerate(canvas):
+        line = "".join(cells).rstrip()
+        if color and y in bright:
+            start, end = bright[y]
+            line = line[:start] + "\x1b[0;37m" + line[start:end] + dim + line[end:]
+        output.append(f"\x1b[{top + y + 1};{left + 1}H\x1b[2K{line}")
+    if color:
+        output.append(_RESET)
+    return "".join(output)

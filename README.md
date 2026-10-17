@@ -9,24 +9,28 @@ Run directly in the current terminal:
 python3.12 game.py
 ```
 
-To open a separate window using the existing platform-specific launcher, first
-create the virtual environment if needed, then launch:
+To open a separate fullscreen window using the platform-specific launcher:
 
 ```sh
-python3.12 -m venv .venv
 python3.12 launcher.py
 ```
 
-On Windows, the launcher uses Windows Terminal and the Ubuntu WSL distribution's
-`.venv`; create that environment from Ubuntu first. On macOS, approve Automation
-prompts and grant Accessibility permission to the app running the launcher if
-requested.
+No extra Python packages are required. If using a virtual environment, activate
+it and run `python launcher.py`; Linux, macOS and WSL children use that active
+Python executable. On Windows, run the launcher inside your WSL distribution;
+Windows Terminal and all game processes use that same distribution and project
+directory. A launcher run from native Windows uses the configured default WSL
+distribution and its `python3.12`. On macOS, approve Automation prompts and grant
+Accessibility permission to the app running the launcher if requested.
 
-Solve the puzzles through Level 11, then leave through the ending screen.
+Solve the puzzles through Level 11, then continue through the Escape screen
+and the final twist.
 During gameplay, `q` and ordinary terminal quit/suspend shortcuts stay ignored.
 Control keys can be puzzle input: Ctrl+Z solves Level 11 without suspending the
-process. The final epilogue waits for Escape. Level 12 remains available as a
-template file, but the finished wizard fight leads directly to the epilogue.
+process. The epilogue waits for Escape; Escape begins the false exit below.
+During the new finale, Ctrl+C is always an emergency exit, including during
+animations. Level 12 remains available as a template file, but the finished
+wizard fight leads directly to the epilogue and finale.
 
 Level 1 has a gently blinking star field around the wizard while it waits for
 input. Star positions stay fixed and their brightness changes every 0.4 seconds.
@@ -46,8 +50,8 @@ Other levels keep their existing
 timing, with a default frame delay of 0.7 seconds.
 
 Level 5 is the Bank of Cache ATM puzzle, with frames stored in
-`levels/level5.py`. Solving it raises the displayed lowercase letter to a
-capital, holds that frame for 3 seconds, then advances to Level 6.
+`levels/level5.py`. Shift+C raises the displayed lowercase letter to a
+capital, then plays the cash withdrawal animation before advancing to Level 6.
 
 Level 6 returns to the same bar as Level 3. Ctrl+W makes the player hand over
 100 credits, then the bartender marks the balance paid and closes the tab.
@@ -96,9 +100,13 @@ amber flash, recoil, corrupted and missing body sections, falling fragments,
 and increasingly dense simulated errors. Its final fatal frame is visible
 before the wizard process exits and its actual terminal window closes. Focus
 returns to the player, its terminal returns to fullscreen, and a separate
-epilogue displays "There's only one way to
-leave the terminal." with a
-subtle blinking cursor. Escape (`\x1b`) exits; arrow-key escape sequences do not.
+epilogue displays "There's only one way to leave the terminal." while the
+terminal appears to fall apart. Its border cracks, sections slip downward and
+ASCII code fragments fall into a heap around the readable clue and blinking
+cursor. The collapse builds over a few seconds, then continues with drifting
+debris until Escape. These are scripted effects at 12 FPS; Escape (`\x1b`)
+works throughout, and End, arrow and function-key escape sequences do not count
+as a standalone Escape.
 The player has ready, recoil and victory poses, with a face, outfit, hands and
 boots. Effects use bounded frames at 30 FPS; `NO_COLOR=1` disables their colour.
 
@@ -108,15 +116,15 @@ To test just Level 11 and its ending in an existing shell:
 python3.12 game.py --ending
 ```
 
-Press Ctrl+Z once to send the spell, watch the death sequence, then press Escape.
-Direct execution returns to that shell and never closes its terminal window.
+Press Ctrl+Z once to send the spell, watch the death sequence, then press Escape
+to reach the false shell. Solve that puzzle with End to finish the game.
 To also test launcher-owned player-window closure:
 
 ```sh
 python3.12 launcher.py --ending
 ```
 
-The launcher passes a unique window token and ownership flag. After Escape,
+The launcher passes a unique window token and ownership flag. After the finale,
 terminal settings are restored before a detached helper closes only that owned
 player window after its game process exits. The helper never kills an entire
 terminal application or targets generic window titles. Wizard windows always
@@ -124,12 +132,68 @@ belong to the game. On desktops without window automation, normal terminal
 exit-on-command-completion behavior closes them; a profile configured to keep
 exited windows open may need manual closure.
 
+The false exit opens its own real terminal while the original game process
+stays in control. It shows a successful exit, a prompt based on the local user,
+hostname, directory and shell, and a blinking cursor. After a short pause, the
+wizard types: "You managed to escape my curse, but you will never put an end
+to me." This prompt never executes commands. Press the **End key** to solve it;
+typing the letters `end` does nothing. Closing this fake terminal reopens the
+same puzzle at most twice, with "Closing a window won't end me." Closing the
+third instance exits. Ctrl+C in the original or any finale terminal cancels
+everything and prevents further reopening.
+
+End immediately disables reopening. The cursor freezes, the clue fragments,
+and fictional tracebacks build over 2.5 seconds. The fake shell closes and up
+to six real wizard terminals appear in a staggered burst. Each uses the existing
+wizard drawing before it shakes, loses rows and collapses. Their panic lasts
+about eight seconds overall; copies close in sequence. Once cleanup completes,
+the original terminal comes forward where supported, stays blank for 0.75
+seconds, then shows `THE END` for two seconds. Direct execution returns to the
+existing real shell and preserves its window. Only launcher-owned player
+windows close automatically.
+
+To test just the new twist, without replaying the fight:
+
+```sh
+python3.12 game.py --finale
+```
+
+Or use `python3.12 launcher.py --finale` to test the dedicated player-window
+lifecycle. To force the complete single-terminal fallback:
+
+```sh
+python3.12 game.py --finale --inline-ending
+```
+
+The fallback keeps the same End solution, fake crash, eight-second panic and
+true ending, drawing six overlapping fake terminal panels. It is selected
+automatically if a window cannot launch or its connection/closure cannot be
+established reliably. On Linux, the extra ending windows require an X11
+session, GNOME Terminal or xterm, and `wmctrl`; Wayland and desktops without
+those tools use the fallback. On macOS, Terminal Automation permissions are
+needed for extra windows and exact-title closure. WSL uses the active
+`WSL_DISTRO_NAME` and PowerShell for exact window cleanup. Placement and focus
+are best effort; failure to focus never blocks completion. If desktop closure
+fails after a window has opened, the game stops that owned child, continues
+inline, and asks you to close any retained ending windows manually.
+
+The decoder accepts common End encodings: `ESC[F`, `ESCOF`, `ESC[4~` and
+`ESC[8~`, including modifiers. It buffers split escape sequences before deciding
+whether a lone Escape was pressed. On a MacBook, try **Fn+Right Arrow**; Apple
+identifies this combination as End, but forwarding depends on terminal settings.
+See [Apple's keyboard shortcuts](https://support.apple.com/en-us/102650).
+If it scrolls instead, open **Terminal > Settings > Profiles > your active
+profile > Keyboard** and add or edit End with modifier None to send `ESC[4~`:
+an actual Escape byte followed by `[4~` (hex `1b 5b 34 7e`), not the letters
+`ESC`. Other terminal apps have their own key mapping settings. See
+[Apple's custom function key guide](https://support.apple.com/guide/terminal/create-custom-function-keys-trml108/mac).
+
 During the fight, keyboard input is still polled. If the wizard
 window cannot connect, stops responding or is closed, the player can press
 Enter to retry. Closing the player window disconnects the wizard and ends it.
 Raw mode is enabled once in `game.py` and restored in `finally`, including on
 exceptions or termination signals. The wizard does not change terminal modes.
-Both windows use the terminal's alternate screen so game frames do not build
+All game windows use the terminal's alternate screen so frames do not build
 up in scrollback. On exit, including after errors, the previous screen and
 visible cursor are restored. Terminal-app scrolling shortcuts may still depend
 on the terminal's own settings.
@@ -166,6 +230,13 @@ The implementation lives in `fight.py` (player state, protocol and epilogue),
 and `fight_windows.py` (window launching, placement and owned-window lifecycle).
 `levels/level10.py` declares the dodge puzzle and `levels/level11.py` declares
 the undo puzzle; `game.py` owns input, raw mode and the shared event loop.
+The new finale is separate: `ending.py` owns its state and authenticated local
+TCP connection, `ending_window.py` displays each child, `ending_effects.py`
+renders its bounded 12 FPS animations, `ending_windows.py` manages only its
+token-labelled windows and verified child processes, and `terminal_input.py`
+decodes buffered key events. Children never launch other game windows. Socket
+messages coordinate scenes, input and health checks, rather than every frame.
+Cleanup is idempotent; no controller or respawning service is left behind.
 
 Run the standard-library checks with:
 
@@ -177,9 +248,15 @@ These cover partial socket messages/writes, a real wizard subprocess in a PTY,
 spell handoff, both Backspace encodings, one-action Ctrl+Z reversal and the full
 wizard death, epilogue controls, safe owned-window closure, resizing,
 disconnects, earlier-level progression and raw-mode cleanup after exceptions.
+Finale checks cover split End/Escape decoding, inert shell input, the two-reopen
+limit, six-window cap, failed launches, socket timeouts, cancellation races,
+child/process ownership and complete inline progression.
 Linux Mint/Cinnamon X11 has also been checked with real terminal windows,
-including the full ending, focus return, automatic closure of a held-open
-owned player window, and leaving a direct-launch terminal open after Escape.
+including wizard defeat, focus return, owned player-window closure, both
+permitted fake-shell reopenings, six simultaneous panic copies and cleanup
+after completion or cancellation. Real PTY checks cover the full inline ending,
+inert typed `end`, a split End sequence, the quiet final pause, prompt Ctrl+C
+and exact terminal-settings restoration.
 macOS and Windows/WSL desktop automation require testing on those operating systems;
 their launch and ownership command construction is covered by tests.
 

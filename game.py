@@ -1,7 +1,6 @@
 import argparse
 import errno
-import os
-import select
+import secrets
 import signal
 import shutil
 import sys
@@ -10,7 +9,9 @@ import time
 import tty
 
 from fight import FRAME_TIME, PlayerFight
+from ending import run_finale
 from fight_windows import schedule_player_close, window_title
+from terminal_input import ESCAPE, KeyReader
 from levels import (
     Level,
     Level1,
@@ -88,11 +89,14 @@ def render_screen(content: str, layout: str = "center") -> None:
     sys.stdout.flush()
 
 
+_key_reader: KeyReader | None = None
+
+
 def read_key(fd: int, timeout: float | None = None) -> str | None:
-    if not select.select([fd], [], [], timeout)[0]:
-        return None
-    # Read directly so timed polling stays in sync with pending input.
-    return os.read(fd, 1).decode("latin-1")
+    global _key_reader
+    if _key_reader is None or _key_reader.fd != fd:
+        _key_reader = KeyReader(fd)
+    return _key_reader.read(timeout)
 
 
 def play_frames(level: Level, fd: int, frame_delay: float | None = None) -> bool:
@@ -112,10 +116,8 @@ def play_frames(level: Level, fd: int, frame_delay: float | None = None) -> bool
 
 
 def escape_pressed(fd: int, key: str | None) -> bool:
-    """Distinguish Escape itself from the prefix of an arrow/function key."""
-    if key != "\x1b":
-        return False
-    return read_key(fd, timeout=0.025) is None
+    """The buffered input reader has already distinguished key sequences."""
+    return key == ESCAPE
 
 
 def play_fight(fd: int, *, start_level: int = 10, window_token: str | None = None) -> bool:
@@ -123,6 +125,7 @@ def play_fight(fd: int, *, start_level: int = 10, window_token: str | None = Non
     fight = None
     error = ""
     retry_requested = False
+    previous_output = None
     try:
         while True:
             if fight is None and not error:
@@ -143,8 +146,11 @@ def play_fight(fd: int, *, start_level: int = 10, window_token: str | None = Non
                 if fight.state == "complete":
                     fight.begin_level(Level11())
                     start_level = 11
-                sys.stdout.write(fight.render())
-                sys.stdout.flush()
+                output = fight.render()
+                if output != previous_output:
+                    sys.stdout.write(output)
+                    sys.stdout.flush()
+                    previous_output = output
             elif error:
                 render_screen(error)
             key = read_key(fd, timeout=FRAME_TIME)
@@ -176,7 +182,9 @@ def play_fight(fd: int, *, start_level: int = 10, window_token: str | None = Non
 
 
 def main(start_fight: bool = False, start_ending: bool = False,
-         owned_window: bool = False, window_token: str | None = None) -> None:
+         owned_window: bool = False, window_token: str | None = None,
+         start_finale: bool = False, inline_ending: bool = False) -> None:
+    global _key_reader
     levels = [
         Level1(),
         Level2(),
@@ -192,27 +200,32 @@ def main(start_fight: bool = False, start_ending: bool = False,
         Level12(),
     ]
     level_index = 9 if start_fight or start_ending else 0
-    if owned_window:
-        if window_token is None:
-            raise ValueError("An owned terminal requires its launcher window token.")
-        sys.stdout.write(f"\x1b]0;{window_title('player', window_token)}\x07")
-        sys.stdout.flush()
+    if owned_window and window_token is None:
+        raise ValueError("An owned terminal requires its launcher window token.")
+    player_token = window_token or secrets.token_hex(16)
+    sys.stdout.write(f"\x1b]0;{window_title('player', player_token)}\x07")
+    sys.stdout.flush()
     fd = sys.stdin.fileno()
     original_settings = termios.tcgetattr(fd)
 
     try:
         tty.setraw(fd)
+        _key_reader = KeyReader(fd)
         # Keep game frames out of the shell's screen and scrollback history.
         sys.stdout.write("\x1b[?1049h\x1b[?25l")
         sys.stdout.flush()
+        if start_finale:
+            run_finale(fd, player_token, inline=inline_ending, read_input=read_key)
+            return
         if not isinstance(levels[level_index], Level10):
             render_screen(levels[level_index].render(), levels[level_index].layout)
         next_idle_frame = time.monotonic() + (levels[level_index].idle_frame_delay or 0)
 
         while True:
             if level_index < len(levels) and isinstance(levels[level_index], Level10):
-                play_fight(fd, start_level=11 if start_ending else 10, window_token=window_token)
-                # The separate epilogue accepts Escape before returning here.
+                escaped = play_fight(fd, start_level=11 if start_ending else 10, window_token=player_token)
+                if escaped:
+                    run_finale(fd, player_token, inline=inline_ending, read_input=read_key)
                 break
             level = levels[level_index] if level_index < len(levels) else None
             timeout = None
@@ -263,6 +276,7 @@ def main(start_fight: bool = False, start_ending: bool = False,
         if error.errno not in (errno.EIO, errno.EPIPE, errno.ENXIO, errno.EBADF):
             raise
     finally:
+        _key_reader = None
         try:
             termios.tcsetattr(fd, termios.TCSADRAIN, original_settings)
         except termios.error:
@@ -284,6 +298,8 @@ if __name__ == "__main__":
     direct = parser.add_mutually_exclusive_group()
     direct.add_argument("--fight", action="store_true", help="start directly at the Level 10 wizard fight")
     direct.add_argument("--ending", action="store_true", help="start directly at the Level 11 ending")
+    direct.add_argument("--finale", action="store_true", help="start directly at the final End-key twist")
+    parser.add_argument("--inline-ending", action="store_true", help="show the final twist in this terminal")
     parser.add_argument("--owned-window", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--window-token", help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -294,4 +310,5 @@ if __name__ == "__main__":
     if args.owned_window and not args.window_token:
         parser.error("--owned-window requires --window-token")
     main(start_fight=args.fight, start_ending=args.ending,
-         owned_window=args.owned_window, window_token=args.window_token)
+         owned_window=args.owned_window, window_token=args.window_token,
+         start_finale=args.finale, inline_ending=args.inline_ending)

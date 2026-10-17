@@ -277,12 +277,12 @@ finally:
             os.close(master)
             os.close(slave)
 
-    def test_escape_lookahead_does_not_treat_arrow_sequences_as_quitting(self):
-        with patch.object(game, "read_key", side_effect=["[", "D", None]):
-            self.assertFalse(game.escape_pressed(0, "\x1b"))
-        with patch.object(game, "read_key", return_value=None):
-            self.assertTrue(game.escape_pressed(0, "\x1b"))
+    def test_decoded_escape_does_not_treat_end_or_arrows_as_quitting(self):
         with patch.object(game, "read_key") as read:
+            self.assertFalse(game.escape_pressed(0, "\x1b[F"))
+            self.assertFalse(game.escape_pressed(0, "END"))
+            self.assertFalse(game.escape_pressed(0, "\x1b[D"))
+            self.assertTrue(game.escape_pressed(0, game.ESCAPE))
             self.assertFalse(game.escape_pressed(0, "z"))
             read.assert_not_called()
 
@@ -292,6 +292,7 @@ finally:
              patch.object(game.termios, "tcsetattr", side_effect=lambda *args: events.append("restore")), \
              patch.object(game.tty, "setraw"), \
              patch.object(game, "play_fight", return_value=True), \
+             patch.object(game, "run_finale", return_value=True), \
              patch.object(game, "schedule_player_close",
                           side_effect=lambda token: events.append(("schedule", token))), \
              contextlib.redirect_stdout(io.StringIO()):
@@ -303,6 +304,7 @@ finally:
              patch.object(game.termios, "tcsetattr") as restore, \
              patch.object(game.tty, "setraw"), \
              patch.object(game, "play_fight", return_value=True), \
+             patch.object(game, "run_finale", return_value=True), \
              patch.object(game, "schedule_player_close") as close, \
              contextlib.redirect_stdout(io.StringIO()):
             game.main(start_ending=True)

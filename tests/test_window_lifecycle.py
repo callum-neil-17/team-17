@@ -197,6 +197,7 @@ class LauncherOwnershipTests(unittest.TestCase):
         self.assertIn('--title=Two Keys Player unique', command)
         self.assertEqual(command[-4:], ['--owned-window', '--window-token', 'unique', '--ending'])
         self.assertNotIn('GNOME_TERMINAL_SCREEN', popen.call_args.kwargs['env'])
+        self.assertIn(launcher.sys.executable, command)
 
     def test_wsl_launcher_uses_current_distribution_and_forwards_fight(self):
         with patch.dict(os.environ, {'WSL_DISTRO_NAME': 'Ubuntu-MyGame'}, clear=True), \
@@ -208,6 +209,7 @@ class LauncherOwnershipTests(unittest.TestCase):
             launcher.launch('--fight')
         command = run.call_args.args[0]
         self.assertIn('Ubuntu-MyGame', command)
+        self.assertIn(launcher.sys.executable, command)
         self.assertIn('--fullscreen', command)
         self.assertIn('--suppressApplicationTitle', command)
         self.assertEqual(command[-4:], ['--owned-window', '--window-token', 'unique', '--fight'])
@@ -222,6 +224,28 @@ class LauncherOwnershipTests(unittest.TestCase):
         self.assertEqual(command[-1], 'Two Keys Player unique')
         self.assertIn('--owned-window --window-token unique --ending', command[-2])
         self.assertIn('set custom title of gameTab', command[2])
+        self.assertIn(launcher.sys.executable, command[-2])
+
+    def test_native_windows_uses_configured_default_distro_without_hardcoding(self):
+        with patch.dict(os.environ, {}, clear=True), \
+             patch.object(launcher.platform, 'system', return_value='Windows'), \
+             patch.object(launcher.shutil, 'which', return_value='wt.exe'), \
+             patch.object(launcher.subprocess, 'run') as run:
+            launcher.launch('--finale')
+        command = run.call_args.args[0]
+        self.assertNotIn('--distribution', command)
+        self.assertNotIn('Ubuntu', command)
+        self.assertIn('python3.12', command)
+        self.assertEqual(command[-1], '--finale')
+
+    def test_wsl_launcher_requires_identifiable_active_distribution(self):
+        with patch.dict(os.environ, {}, clear=True), \
+             patch.object(launcher.platform, 'system', return_value='Linux'), \
+             patch.object(launcher.platform, 'release', return_value='microsoft'), \
+             patch.object(launcher.subprocess, 'run') as run:
+            with self.assertRaisesRegex(SystemExit, 'WSL_DISTRO_NAME'):
+                launcher.launch('--finale')
+        run.assert_not_called()
 
 
 if __name__ == '__main__':

@@ -7,11 +7,12 @@ import secrets
 import shlex
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 
 project = Path(__file__).resolve().parent
-python = project / ".venv" / "bin" / "python"
+python = sys.executable
 
 
 def launch(mode: str | None = None) -> None:
@@ -29,18 +30,21 @@ def launch(mode: str | None = None) -> None:
                 "Fullscreen launch requires Windows Terminal (wt.exe). "
                 "Install it and enable its app execution alias."
             )
+        distribution = os.environ.get("WSL_DISTRO_NAME")
+        distro_args = ["--distribution", distribution] if distribution else []
         subprocess.run([
             terminal, "--window", "new", "--fullscreen", "new-tab",
             "--title", title, "--suppressApplicationTitle", "wsl.exe",
-            "--distribution", os.environ.get("WSL_DISTRO_NAME", "Ubuntu"),
-            "--cd", str(project), "--exec", "./.venv/bin/python", *game_args,
+            *distro_args, "--cd", str(project), "--exec", "python3.12", *game_args,
         ])
 
     elif system == "Linux" and (os.environ.get("WSL_DISTRO_NAME") or "microsoft" in platform.release().lower()):
         # Both the player and later wizard must use this exact distribution.
-        distro = os.environ.get("WSL_DISTRO_NAME", "Ubuntu")
+        distro = os.environ.get("WSL_DISTRO_NAME")
+        if not distro:
+            raise SystemExit("Run the launcher inside your WSL distribution so WSL_DISTRO_NAME is available.")
         wsl = ["wsl.exe", "--distribution", distro, "--cd", str(project),
-               "--exec", "./.venv/bin/python", *game_args]
+               "--exec", str(python), *game_args]
         terminal = shutil.which("wt.exe")
         if terminal:
             command = [terminal, "--window", "new", "--fullscreen", "new-tab",
@@ -96,8 +100,9 @@ def main() -> None:
     direct = parser.add_mutually_exclusive_group()
     direct.add_argument("--fight", action="store_true", help="Start at Level 10")
     direct.add_argument("--ending", action="store_true", help="Start at Level 11")
+    direct.add_argument("--finale", action="store_true", help="Start at the final End-key twist")
     args = parser.parse_args()
-    launch("--ending" if args.ending else "--fight" if args.fight else None)
+    launch("--finale" if args.finale else "--ending" if args.ending else "--fight" if args.fight else None)
 
 
 if __name__ == "__main__":

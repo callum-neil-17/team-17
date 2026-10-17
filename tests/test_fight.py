@@ -296,6 +296,7 @@ class IntegrationTests(unittest.TestCase):
              patch.object(game, 'read_key', side_effect=keys), \
              patch.object(game, 'play_frames', return_value=True) as frames, \
              patch.object(game, 'play_fight', return_value=True) as demo, \
+             patch.object(game, 'run_finale', return_value=True), \
              patch.object(game, 'render_screen') as render, \
              contextlib.redirect_stdout(output):
             game.main()
@@ -360,14 +361,13 @@ class IntegrationTests(unittest.TestCase):
 
         demo = Demo()
         with patch.object(game, 'PlayerFight', return_value=demo), \
-             patch.object(game, 'read_key', side_effect=['q', '\x03', 'x', '\x1a', '\x1b', None]) as read, \
+             patch.object(game, 'read_key', side_effect=['q', '\x03', 'x', '\x1a', game.ESCAPE]) as read, \
              contextlib.redirect_stdout(io.StringIO()):
             self.assertTrue(game.play_fight(0))
-        self.assertEqual(read.call_count, 6)
+        self.assertEqual(read.call_count, 5)
         self.assertEqual(demo.level.number, 11)
         self.assertTrue(demo.closed)
-        self.assertTrue(all(call.kwargs['timeout'] == fight.FRAME_TIME for call in read.call_args_list[:-1]))
-        self.assertEqual(read.call_args_list[-1].kwargs['timeout'], 0.025)
+        self.assertTrue(all(call.kwargs['timeout'] == fight.FRAME_TIME for call in read.call_args_list))
 
     def test_wsl_launch_uses_same_distro_and_a_new_window(self):
         with patch.dict(os.environ, {'WSL_DISTRO_NAME': 'Ubuntu-Test'}), \

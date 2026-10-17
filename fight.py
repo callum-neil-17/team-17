@@ -10,7 +10,7 @@ import time
 from textwrap import dedent, wrap
 
 from fight_windows import MANUAL_LAYOUT, WindowPair
-from fight_effects import PLAYER_HAND_ROW, PLAYER_POSES, PLAYER_WIDTH
+from fight_effects import PLAYER_HAND_ROW, PLAYER_POSES, PLAYER_WIDTH, render_terminal_collapse
 from levels.level1 import WIZARD
 
 
@@ -164,19 +164,8 @@ def draw_scene(role: str, size: tuple[int, int], status: str, note: str = "",
 
 
 def draw_epilogue(size: tuple[int, int], now: float, *, clear: bool = True) -> str:
-    columns, rows = size
-    message = "There's only one way to leave the terminal."
-    cursor = "_" if int(now / 0.65) % 2 == 0 else " "
-    lines = wrap(message, max(1, columns - 1)) + [cursor]
-    top = max(0, (rows - len(lines)) // 2)
-    output = []
-    for index, line in enumerate(lines):
-        line = line[:max(1, columns - 1)]
-        row = top + index + 1
-        if row <= rows:
-            left = max(1, (columns - len(line)) // 2 + 1)
-            output.append(f"\x1b[{row};{left}H{line}")
-    return "\x1b[?25l" + ("\x1b[2J\x1b[H" if clear else "") + "".join(output)
+    color = os.environ.get("TERM") != "dumb" and "NO_COLOR" not in os.environ
+    return render_terminal_collapse(size, now, color=color, clear=clear)
 
 
 class PlayerFight:
@@ -222,6 +211,7 @@ class PlayerFight:
         self.window_cleanup_started = False
         self.cleanup_complete = False
         self.epilogue_cleared = False
+        self.epilogue_started: float | None = None
 
     @property
     def spell_speed(self) -> float:
@@ -452,7 +442,10 @@ class PlayerFight:
 
     def render(self) -> str:
         if self.state == "epilogue":
-            output = draw_epilogue(self.size, self.last_tick, clear=not self.epilogue_cleared)
+            if self.epilogue_started is None:
+                self.epilogue_started = self.last_tick
+            elapsed = max(0.0, self.last_tick - self.epilogue_started)
+            output = draw_epilogue(self.size, elapsed, clear=not self.epilogue_cleared)
             self.epilogue_cleared = True
             return output
         pose = "ready"
