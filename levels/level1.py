@@ -6,7 +6,6 @@ class Level1(Level):
         super().__init__(number=1, title="Level 1", required_input=("\r", "\n"))
 
 WIZARD = [
-    # Frame 1: Wand rests, small stars
     r"""
         *         _,-'|    .
                ,-'._  |
@@ -30,7 +29,6 @@ WIZARD = [
       ||        ccc/
       ||                hjm
 """,
-    # Frame 2: Magic expands, arm shifts, stars twinkle
     r"""
       \ | /       _,-'|  *
     -- * --    ,-'._  |      .
@@ -54,7 +52,6 @@ WIZARD = [
       ||        ccc/
       ||                hjm
 """,
-    # Frame 3: Magic swirls, arm shifts back, different stars
     r"""
     .             _,-'|     +
           *    ,-'._  |
