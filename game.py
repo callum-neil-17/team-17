@@ -1,11 +1,16 @@
+import argparse
+import errno
 import os
 import select
+import signal
 import shutil
 import sys
 import termios
 import time
 import tty
 
+from fight import FRAME_TIME, PlayerFight
+from fight_windows import schedule_player_close, window_title
 from levels import (
     Level,
     Level1,
@@ -107,7 +112,73 @@ def play_frames(level: Level, fd: int, frame_delay: float | None = None) -> bool
     return True
 
 
-def main() -> None:
+def escape_pressed(fd: int, key: str | None) -> bool:
+    """Distinguish Escape itself from the prefix of an arrow/function key."""
+    if key != "\x1b":
+        return False
+    return read_key(fd, timeout=0.025) is None
+
+
+def play_fight(fd: int, *, start_level: int = 10, window_token: str | None = None) -> bool:
+    """Run Levels 10 and 11 together without replacing either fight window."""
+    fight = None
+    error = ""
+    retry_requested = False
+    try:
+        while True:
+            if fight is None and not error:
+                try:
+                    fight = PlayerFight(start_level=start_level, window_token=window_token)
+                    sys.stdout.write(f"\x1b]0;Two Keys Player {fight.token}\x07\x1b[2J\x1b[H")
+                    sys.stdout.flush()
+                    fight.open_window()
+                except OSError as exc:
+                    error = f"Cannot start the fight: {exc}. Press Enter to retry."
+            if fight:
+                fight.tick()
+                if retry_requested and (fight.windows is None or fight.cleanup_complete):
+                    # The old exact-title wizard must be gone before reusing a
+                    # launcher identity for another attempt.
+                    fight, error, retry_requested = None, "", False
+                    continue
+                sys.stdout.write(fight.render())
+                sys.stdout.flush()
+            elif error:
+                render_screen(error)
+            key = read_key(fd, timeout=FRAME_TIME)
+            if key == "":
+                return False
+            if fight and fight.state == "epilogue" and escape_pressed(fd, key):
+                return True
+            # Backspace only solves Level 10 once the spell has paused.
+            if fight:
+                fight.handle_key(key)
+            # q and control bytes keep the game's existing behavior. Enter
+            # retries a failed connection or advances a solved/template level.
+            if key in ("\r", "\n"):
+                if fight and fight.state == "complete":
+                    fight.begin_level(Level11())
+                    start_level = 11
+                    continue
+                if error or (fight and fight.state == "failed"):
+                    if fight:
+                        start_level = fight.level.number
+                        fight.close()
+                        retry_requested = True
+                    else:
+                        error = ""
+    finally:
+        if fight:
+            fight.close()
+        try:
+            sys.stdout.write("\x1b[?25h\x1b[0m")
+            sys.stdout.flush()
+        except OSError:
+            pass
+
+
+def main(start_fight: bool = False, start_ending: bool = False,
+         owned_window: bool = False, window_token: str | None = None) -> None:
     levels = [
         Level1(),
         Level2(),
@@ -122,15 +193,25 @@ def main() -> None:
         Level11(),
         Level12(),
     ]
-    level_index = 0
+    level_index = 9 if start_fight or start_ending else 0
+    if owned_window:
+        if window_token is None:
+            raise ValueError("An owned terminal requires its launcher window token.")
+        sys.stdout.write(f"\x1b]0;{window_title('player', window_token)}\x07")
+        sys.stdout.flush()
     fd = sys.stdin.fileno()
     original_settings = termios.tcgetattr(fd)
 
     try:
         tty.setraw(fd)
-        render_screen(levels[level_index].render(), levels[level_index].layout)
+        if not isinstance(levels[level_index], Level10):
+            render_screen(levels[level_index].render(), levels[level_index].layout)
 
         while True:
+            if level_index < len(levels) and isinstance(levels[level_index], Level10):
+                play_fight(fd, start_level=11 if start_ending else 10, window_token=window_token)
+                # The separate epilogue accepts Escape before returning here.
+                break
             key = read_key(fd)
 
             # EOF means the terminal disconnected, not that Ctrl+D was pressed.
@@ -153,9 +234,9 @@ def main() -> None:
                 if not play_frames(levels[level_index], fd):
                     break
                 level_index += 1
-                if level_index < len(levels):
+                if level_index < len(levels) and not isinstance(levels[level_index], Level10):
                     render_screen(levels[level_index].render(), levels[level_index].layout)
-                else:
+                elif level_index == len(levels):
                     render_screen("Game complete! Press q to quit.\r\n")
             else:
                 # A puzzle can update its scene without advancing the level.
@@ -165,9 +246,39 @@ def main() -> None:
 
     except KeyboardInterrupt:
         pass
+    except OSError as error:
+        if error.errno not in (errno.EIO, errno.EPIPE, errno.ENXIO, errno.EBADF):
+            raise
     finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, original_settings)
+        try:
+            termios.tcsetattr(fd, termios.TCSADRAIN, original_settings)
+        except termios.error:
+            # There is nothing left to restore if the terminal was disconnected.
+            pass
+        try:
+            sys.stdout.write("\x1b[0m\x1b[?25h\x1b[2J\x1b[H")
+            if not owned_window:
+                sys.stdout.write("\x1b]0;Two Keys\x07")
+            sys.stdout.flush()
+        except OSError:
+            pass
+        if owned_window:
+            schedule_player_close(window_token)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Two Keys terminal game")
+    direct = parser.add_mutually_exclusive_group()
+    direct.add_argument("--fight", action="store_true", help="start directly at the Level 10 wizard fight")
+    direct.add_argument("--ending", action="store_true", help="start directly at the Level 11 ending")
+    parser.add_argument("--owned-window", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--window-token", help=argparse.SUPPRESS)
+    args = parser.parse_args()
+    def stop(signum: int, frame: object) -> None:
+        raise KeyboardInterrupt
+    for signum in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(signum, stop)
+    if args.owned_window and not args.window_token:
+        parser.error("--owned-window requires --window-token")
+    main(start_fight=args.fight, start_ending=args.ending,
+         owned_window=args.owned_window, window_token=args.window_token)

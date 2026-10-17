@@ -10,12 +10,14 @@ LEVEL11_FRAMES = [
 
 
 class Level11(Level):
+    """Undo the wizard's final spell in the same two terminal windows."""
+
     def __init__(self) -> None:
         super().__init__(
             number=11,
             title="Level 11",
-            required_input=("\r", "\n"),  # Replace with the puzzle's input.
+            required_input=("\x1a",),  # Ctrl+Z is input in the game's raw mode.
             art=LEVEL11_FRAMES,
-            description="",  # Add the background description here.
-            prompt="Press Enter to continue.",  # Replace with your riddle.
+            description="The wizard unleashes one final spell.",
+            prompt="There's no taking this one back!",
         )
