@@ -14,6 +14,7 @@ class Level:
         self.frames = [art] if isinstance(art, str) else list(art)
         self.prompt = prompt
         self.frame = 0
+        self.layout = "center"
 
     def art(self, frame: int) -> str:
         # Cycle through the frames so any frame number is valid.
