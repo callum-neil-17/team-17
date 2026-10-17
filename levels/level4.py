@@ -47,6 +47,8 @@ DRINK_FRAMES = [
 # F5 arrives as an escape sequence, one character at a time. Most terminals
 # send the first form; the Linux console sends the second.
 F5_SEQUENCES = ("\x1b[15~", "\x1b[[E")
+# Ctrl+R also means refresh, and works on macOS where F5 is often unavailable.
+CTRL_R = "\x12"
 
 
 class Level4(Level):
@@ -54,7 +56,7 @@ class Level4(Level):
         super().__init__(
             number=4,
             title="Level 4",
-            required_input=F5_SEQUENCES,
+            required_input=(*F5_SEQUENCES, CTRL_R),
             art=DRINK_FRAMES,
             prompt="You take a drink... ahhh, how refreshing!",
         )
