@@ -1,5 +1,6 @@
 import platform
 import shlex
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -9,22 +10,34 @@ python = project / ".venv" / "bin" / "python"
 system = platform.system()
 
 if system == "Windows":
-    # Run the game using Ubuntu's Python environment.
+    terminal = shutil.which("wt.exe")
+    if terminal is None:
+        raise SystemExit(
+            "Fullscreen launch requires Windows Terminal (wt.exe). "
+            "Install it and enable its app execution alias."
+        )
+
+    # Open a new fullscreen window running Ubuntu's Python environment.
     subprocess.Popen(
         [
+            terminal,
+            "--window", "new",
+            "--fullscreen",
+            "new-tab",
+            "--title", "Two Keys",
             "wsl.exe",
             "--distribution", "Ubuntu",
             "--cd", str(project),
             "--exec", "./.venv/bin/python",
             "game.py",
         ],
-        creationflags=subprocess.CREATE_NEW_CONSOLE,
     )
 
 elif system == "Linux":
     subprocess.Popen([
         "gnome-terminal",
         "--window",
+        "--full-screen",
         "--title=Two Keys",
         f"--working-directory={project}",
         "--",
@@ -44,13 +57,30 @@ elif system == "Darwin":  # macOS
             do script (item 1 of argv)
             activate
         end tell
+        -- Requires Accessibility permission for the app running this launcher.
+        tell application "System Events"
+            tell process "Terminal"
+                set frontmost to true
+                set value of attribute "AXFullScreen" of window 1 to true
+            end tell
+        end tell
     end run
     '''
 
-    subprocess.run(
-        ["osascript", "-e", script, command],
-        check=True,
-    )
+    try:
+        subprocess.run(
+            ["osascript", "-e", script, command],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as error:
+        raise SystemExit(
+            "macOS Terminal automation failed. Allow the app running this "
+            "launcher in System Settings > Privacy & Security > Accessibility, "
+            "and approve any Automation prompts, then try again.\n"
+            f"{error.stderr.strip()}"
+        ) from error
 
 else:
     raise SystemExit(f"Unsupported system: {system}")
