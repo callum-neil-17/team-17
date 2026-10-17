@@ -30,3 +30,9 @@ quit.
 through `levels/level5.py` configures a separate level and can later override
 `render()` or `check_input()`. Keyboard reading, terminal setup and restoration,
 and progression remain in `game.py`.
+
+Each screen is centered using the current terminal size whenever it is rendered.
+Separate titles, art and prompts with a blank line to center each section
+independently. Lines within each art section keep their relative indentation.
+Content larger than the window starts at the top or left edge; enlarge the
+terminal to see it fully.
