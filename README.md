@@ -22,7 +22,7 @@ On Windows, the launcher uses Windows Terminal and the Ubuntu WSL distribution's
 prompts and grant Accessibility permission to the app running the launcher if
 requested.
 
-Solve each level to advance through six levels. Most current levels use Enter.
+Solve each level to advance through seven levels. Most current levels use Enter.
 During gameplay, `q` and terminal control keys such as Ctrl+Z and Ctrl+D are
 ignored. Ctrl+C is available as puzzle input and does not exit the game. After
 completion, press `q` to quit; the completion screen stays visible until then.
@@ -40,10 +40,15 @@ Level 5 is the Bank of Cache ATM puzzle, with frames stored in
 `levels/level5.py`. Solving it raises the displayed lowercase letter to a
 capital, holds that frame for 3 seconds, then advances to Level 6.
 
-Level 6 closes the bill with a cheque that gets ticked off before the completion
-screen. Its frames are in `levels/level6.py`; fill in the empty `description=`
-and `prompt=` strings there with your own background text and riddle. The
-checked cheque stays visible for 3 seconds before the game completes.
+Level 6 closes the bill with a cheque that gets ticked off before Level 7.
+Its frames and text are in `levels/level6.py`. The checked cheque stays visible
+for 3 seconds before advancing.
+
+Level 7 shows a Memory Management Unit (MMU) book lying on a table. Its artwork
+is stored in `BOOK_FRAMES` in `levels/level7.py`. The `description=` and `prompt=`
+strings are blank for you to fill in. Enter is the temporary continue key;
+change `required_input=` when you choose its puzzle. Completing Level 7 shows
+the final completion screen.
 
 `levels/level.py` defines the shared `Level` class. Each of `levels/level1.py`
 through `levels/level5.py` configures a separate level and can later override
