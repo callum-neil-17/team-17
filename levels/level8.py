@@ -57,3 +57,4 @@ class Level8(Level):
             prompt="You must get off at your stop.",
         )
         self.frame_delay = 1.0
+        self.layout = "level9"
