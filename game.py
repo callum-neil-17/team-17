@@ -1,9 +1,12 @@
+import os
+import select
 import shutil
 import sys
 import termios
+import time
 import tty
 
-from levels import Level1, Level2, Level3, Level4, Level5, Level6
+from levels import Level, Level1, Level2, Level3, Level4, Level5, Level6
 
 
 def _centered_lines(section: str, columns: int) -> list[str]:
@@ -55,6 +58,27 @@ def render_screen(content: str, layout: str = "center") -> None:
     sys.stdout.flush()
 
 
+def read_key(fd: int, timeout: float | None = None) -> str | None:
+    if not select.select([fd], [], [], timeout)[0]:
+        return None
+    # Read one byte directly so buffered input cannot hide a quit key from select.
+    return os.read(fd, 1).decode("latin-1")
+
+
+def play_frames(level: Level, fd: int, frame_delay: float = 0.35) -> bool:
+    """Play the remaining frames once; return False if the player quits."""
+    for frame in range(level.frame + 1, len(level.frames)):
+        level.frame = frame
+        render_screen(level.render(), level.layout)
+        deadline = time.monotonic() + frame_delay
+
+        while (remaining := deadline - time.monotonic()) > 0:
+            if read_key(fd, timeout=remaining) in ("q", "\x03", ""):
+                return False
+
+    return True
+
+
 def main() -> None:
     levels = [Level1(), Level2(), Level3(), Level4(), Level5(),Level6()]
     level_index = 0
@@ -66,13 +90,15 @@ def main() -> None:
         render_screen(levels[level_index].render(), levels[level_index].layout)
 
         while True:
-            key = sys.stdin.read(1)
+            key = read_key(fd)
 
             # Raw mode delivers Ctrl+C as a character rather than a signal.
             if key in ("q", "\x03", ""):
                 break
 
             if level_index < len(levels) and levels[level_index].check_input(key):
+                if not play_frames(levels[level_index], fd):
+                    break
                 level_index += 1
                 if level_index < len(levels):
                     render_screen(levels[level_index].render(), levels[level_index].layout)

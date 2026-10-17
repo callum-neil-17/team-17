@@ -26,6 +26,10 @@ Press Enter to advance through five levels. Other keys are ignored, except `q`
 or Ctrl+C, which exit at any time. The completion screen stays visible until you
 quit.
 
+On Level 2, Enter plays the door-opening frames once before advancing. Press
+`q` or Ctrl+C to quit even while the door is opening. Frame playback and timing
+are handled in `game.py`; the drawings are stored in `levels/level2.py`.
+
 `levels/level.py` defines the shared `Level` class. Each of `levels/level1.py`
 through `levels/level5.py` configures a separate level and can later override
 `render()` or `check_input()`. Keyboard reading, terminal setup and restoration,
