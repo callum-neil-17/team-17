@@ -44,7 +44,7 @@ class Level5(Level):
         super().__init__(
             number=5,
             title="Level 5",
-            required_input=("\x10",),  # Ctrl+C is a raw input byte.
+            required_input=("P",),  # Ctrl+C is a raw input byte.
             art=ATM_FRAMES,
             description="You need some money to pay the tab, so you head to an ATM.",
             prompt="Broke? Raise some capital.",
