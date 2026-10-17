@@ -97,12 +97,11 @@ def read_key(fd: int, timeout: float | None = None) -> str | None:
 
 def play_frames(level: Level, fd: int, frame_delay: float | None = None) -> bool:
     """Play the remaining frames once; return False if terminal input closes."""
-    if frame_delay is None:
-        frame_delay = level.frame_delay
     for frame in range(level.frame + 1, len(level.frames)):
         level.frame = frame
         render_screen(level.render(), level.layout)
-        deadline = time.monotonic() + frame_delay
+        delay = frame_delay if frame_delay is not None else level.frame_delays.get(frame, level.frame_delay)
+        deadline = time.monotonic() + delay
 
         while (remaining := deadline - time.monotonic()) > 0:
             # Consume input during playback, including q and control keys.

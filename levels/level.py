@@ -17,6 +17,8 @@ class Level:
         self.description = description
         self.frame = 0
         self.frame_delay = 0.7
+        # A level can hold selected frames longer than its normal animation.
+        self.frame_delays: dict[int, float] = {}
         self.layout = "center"
 
     def art(self, frame: int) -> str:

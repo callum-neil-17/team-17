@@ -32,10 +32,14 @@ On Level 2, Enter plays the door-opening frames once before advancing. Input is
 ignored while the door opens. Frame playback and timing are handled in
 `game.py`; the drawings are stored in `levels/level2.py`.
 
-Level 3 is a bar puzzle with frames stored in `levels/level3.py`, like the door
-frames in Level 2. Solving it displays a drink and a bill on the counter, then
-automatically advances to Level 4. Frames last 0.7
-seconds by default; the Level 3 response stays visible for 3 seconds.
+Level 3 is a bar puzzle with 13 frames stored in `levels/level3.py`, like the
+door frames in Level 2. The scene includes lamps, stocked shelves, a bartender,
+a panelled counter and stools. Solving it makes the bartender pick up a bottle,
+pour a foamy drink and slide it across the counter. The serving frames last
+0.2 seconds; the finished scene stays visible for 0.6 seconds before
+automatically advancing to Level 4, for a total of about 2.8 seconds.
+Other levels keep their existing
+timing, with a default frame delay of 0.7 seconds.
 
 Level 5 is the Bank of Cache ATM puzzle, with frames stored in
 `levels/level5.py`. Solving it raises the displayed lowercase letter to a
