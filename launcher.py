@@ -1,3 +1,4 @@
+import os
 import platform
 import shlex
 import subprocess
@@ -19,6 +20,21 @@ if system == "Windows":
             "game.py",
         ],
         creationflags=subprocess.CREATE_NEW_CONSOLE,
+    )
+
+elif system == "Linux" and "microsoft" in platform.release().lower():
+    # WSL: open a native Windows console that runs the game back inside WSL.
+    distro = os.environ.get("WSL_DISTRO_NAME", "Ubuntu")
+    subprocess.Popen(
+        [
+            "cmd.exe", "/c", "start", "Two Keys",
+            "wsl.exe",
+            "--distribution", distro,
+            "--cd", str(project),
+            "--exec", "./.venv/bin/python",
+            "game.py",
+        ],
+        cwd="/mnt/c",  # avoids cmd.exe's "UNC paths are not supported" warning
     )
 
 elif system == "Linux":
