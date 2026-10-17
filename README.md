@@ -22,13 +22,19 @@ On Windows, the launcher uses Windows Terminal and the Ubuntu WSL distribution's
 prompts and grant Accessibility permission to the app running the launcher if
 requested.
 
-Press Enter to advance through five levels. Other keys are ignored, except `q`
-or Ctrl+C, which exit at any time. The completion screen stays visible until you
-quit.
+Solve each level to advance through six levels. Most current levels use Enter.
+During gameplay, `q` and terminal control keys such as Ctrl+C, Ctrl+Z and Ctrl+D
+are ignored. After completion, press `q` to quit; the completion screen stays
+visible until then.
 
-On Level 2, Enter plays the door-opening frames once before advancing. Press
-`q` or Ctrl+C to quit even while the door is opening. Frame playback and timing
-are handled in `game.py`; the drawings are stored in `levels/level2.py`.
+On Level 2, Enter plays the door-opening frames once before advancing. Input is
+ignored while the door opens. Frame playback and timing are handled in
+`game.py`; the drawings are stored in `levels/level2.py`.
+
+Level 3 is a bar puzzle with frames stored in `levels/level3.py`, like the door
+frames in Level 2. Solving it displays a drink and a bill on the counter, then
+automatically advances to Level 4. Frames last 0.7
+seconds by default; the Level 3 response stays visible for 3 seconds.
 
 `levels/level.py` defines the shared `Level` class. Each of `levels/level1.py`
 through `levels/level5.py` configures a separate level and can later override
@@ -40,3 +46,8 @@ Separate titles, art and prompts with a blank line to center each section
 independently. Lines within each art section keep their relative indentation.
 Content larger than the window starts at the top or left edge; enlarge the
 terminal to see it fully.
+
+To describe a level's background, pass `description=` when constructing it. For
+example, Level 3 uses `description="A quiet bar waits in the warm light."`.
+The description is rendered above that level's title; edit the string in the
+level file whenever you want different text.

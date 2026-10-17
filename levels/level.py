@@ -6,6 +6,7 @@ class Level:
         required_input: tuple[str, ...],
         art: str | list[str] = "",
         prompt: str = "",
+        description: str = "",
     ) -> None:
         self.number = number
         self.title = title
@@ -13,7 +14,9 @@ class Level:
         # Store art as a list of frames so levels can be animated later.
         self.frames = [art] if isinstance(art, str) else list(art)
         self.prompt = prompt
+        self.description = description
         self.frame = 0
+        self.frame_delay = 0.7
         self.layout = "center"
 
     def art(self, frame: int) -> str:
@@ -21,7 +24,10 @@ class Level:
         return self.frames[frame % len(self.frames)].strip("\n")
 
     def render(self) -> str:
-        sections = [self.title]
+        sections = []
+        if self.description:
+            sections.append(self.description)
+        sections.append(self.title)
         art = self.art(self.frame)
         if art:
             sections.append(art)
