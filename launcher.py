@@ -51,6 +51,10 @@ elif system == "Linux" and "microsoft" in platform.release().lower():
     )
 
 elif system == "Linux":
+    # A new window must not inherit references to an old GNOME Terminal screen.
+    launch_env = os.environ.copy()
+    launch_env.pop("GNOME_TERMINAL_SCREEN", None)
+    launch_env.pop("GNOME_TERMINAL_SERVICE", None)
     subprocess.Popen([
         "gnome-terminal",
         "--window",
@@ -60,7 +64,7 @@ elif system == "Linux":
         "--",
         str(python),
         "game.py",
-    ])
+    ], env=launch_env)
 
 elif system == "Darwin":  # macOS
     command = (

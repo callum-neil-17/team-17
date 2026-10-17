@@ -115,9 +115,9 @@ def main() -> None:
                     break
                 continue
 
-            # Raw mode delivers shortcuts such as Ctrl+C and Ctrl+Z as input.
-            # Ignore them and q throughout gameplay.
-            if key in (None, "q", "\x03", "\x04", "\x1a", "\x1c", "\x13", "\x11"):
+            # Ctrl+C is ordinary input in raw mode: pass it to the current
+            # puzzle rather than using it to exit. Other shortcuts stay ignored.
+            if key in (None, "q", "\x04", "\x1a", "\x1c", "\x13", "\x11"):
                 continue
 
             level = levels[level_index]

@@ -23,9 +23,9 @@ prompts and grant Accessibility permission to the app running the launcher if
 requested.
 
 Solve each level to advance through six levels. Most current levels use Enter.
-During gameplay, `q` and terminal control keys such as Ctrl+C, Ctrl+Z and Ctrl+D
-are ignored. After completion, press `q` to quit; the completion screen stays
-visible until then.
+During gameplay, `q` and terminal control keys such as Ctrl+Z and Ctrl+D are
+ignored. Ctrl+C is available as puzzle input and does not exit the game. After
+completion, press `q` to quit; the completion screen stays visible until then.
 
 On Level 2, Enter plays the door-opening frames once before advancing. Input is
 ignored while the door opens. Frame playback and timing are handled in
@@ -35,6 +35,15 @@ Level 3 is a bar puzzle with frames stored in `levels/level3.py`, like the door
 frames in Level 2. Solving it displays a drink and a bill on the counter, then
 automatically advances to Level 4. Frames last 0.7
 seconds by default; the Level 3 response stays visible for 3 seconds.
+
+Level 5 is the Bank of Cache ATM puzzle, with frames stored in
+`levels/level5.py`. Solving it raises the displayed lowercase letter to a
+capital, holds that frame for 3 seconds, then advances to Level 6.
+
+Level 6 closes the bill with a cheque that gets ticked off before the completion
+screen. Its frames are in `levels/level6.py`; fill in the empty `description=`
+and `prompt=` strings there with your own background text and riddle. The
+checked cheque stays visible for 3 seconds before the game completes.
 
 `levels/level.py` defines the shared `Level` class. Each of `levels/level1.py`
 through `levels/level5.py` configures a separate level and can later override
