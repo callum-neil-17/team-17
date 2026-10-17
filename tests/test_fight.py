@@ -191,7 +191,8 @@ class FightTests(unittest.TestCase):
         self.session.state = 'dodging'
         self.session.player_step = 1
         self.session.player_x = 0
-        lines = re.findall(r'\x1b\[(\d+);1H\x1b\[2K([^\x1b]*)', self.session.render())
+        screen = re.sub(r'\x1b\[[0-9;]*m', '', self.session.render())
+        lines = re.findall(r'\x1b\[(\d+);1H\x1b\[2K([^\x1b]*)', screen)
         spell_line = next(int(row) for row, line in lines if fight.SPELL in line)
         head_line = next(int(row) for row, line in lines if '.----.' in line)
         self.assertLess(spell_line, head_line)
@@ -286,7 +287,7 @@ class IntegrationTests(unittest.TestCase):
             game.main(start_fight=True)
         restore.assert_called_once_with(game.sys.stdin.fileno(), termios.TCSADRAIN, 'original')
 
-    def test_fight_input_remains_responsive_and_ignores_quit_bytes(self):
+    def test_fight_automatically_advances_after_dodge_and_ignores_quit_bytes(self):
         class Demo:
             token = 'test'
             state = 'wizard_spell'
@@ -316,10 +317,11 @@ class IntegrationTests(unittest.TestCase):
 
         demo = Demo()
         with patch.object(game, 'PlayerFight', return_value=demo), \
-             patch.object(game, 'read_key', side_effect=['q', '\x03', 'x', '\r', '\x1a', '\x1b', None]) as read, \
+             patch.object(game, 'read_key', side_effect=['q', '\x03', 'x', '\x1a', '\x1b', None]) as read, \
              contextlib.redirect_stdout(io.StringIO()):
             self.assertTrue(game.play_fight(0))
-        self.assertEqual(read.call_count, 7)
+        self.assertEqual(read.call_count, 6)
+        self.assertEqual(demo.level.number, 11)
         self.assertTrue(demo.closed)
         self.assertTrue(all(call.kwargs['timeout'] == fight.FRAME_TIME for call in read.call_args_list[:-1]))
         self.assertEqual(read.call_args_list[-1].kwargs['timeout'], 0.025)

@@ -101,7 +101,7 @@ class EndingFightTests(unittest.TestCase):
         self.assertEqual(self.session.state, "epilogue")
         self.assertIsNone(self.session.peer)
         self.assertEqual(self.session.listener.fileno(), -1)
-        self.assertIn("ESCAPE TERMINAL", self.session.render())
+        self.assertIn("There's only one way to leave the terminal.", self.session.render())
         self.session.handle_key("\x1a")
         self.assertEqual(self.session.state, "epilogue")
 
@@ -217,7 +217,7 @@ class EndingFightTests(unittest.TestCase):
             self.assertIsNone(self.session.peer)
             process.wait(timeout=3)
             self.assertEqual(process.returncode, 0)
-            self.assertIn("ESCAPE TERMINAL", self.session.render())
+            self.assertIn("There's only one way to leave the terminal.", self.session.render())
         finally:
             self.session.close()
             if process.poll() is None:
@@ -317,7 +317,7 @@ finally:
                     self.state = "epilogue"
 
             def render(self):
-                return "ESCAPE TERMINAL" if self.state == "epilogue" else ""
+                return "There's only one way to leave the terminal." if self.state == "epilogue" else ""
 
             def handle_key(self, key):
                 if key == "\x1a" and self.state == "awaiting_undo":

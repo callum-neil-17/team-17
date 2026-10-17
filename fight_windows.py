@@ -192,6 +192,15 @@ on run argv
                 else
                     set index of w to 1
                     activate
+                    if requestedAction is "fullscreen" then
+                        set targetWindowName to name of w
+                        tell application "System Events"
+                            tell process "Terminal"
+                                set frontmost to true
+                                set value of attribute "AXFullScreen" of window targetWindowName to true
+                            end tell
+                        end tell
+                    end if
                 end if
                 return "found"
             end if
@@ -215,6 +224,13 @@ public class OwnedFightWindow {
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr w, uint message, IntPtr wparam, IntPtr lparam);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr w, int n);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr w);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr w, out Rect r);
+  [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr w, int index);
+  [DllImport("user32.dll")] public static extern IntPtr MonitorFromWindow(IntPtr w, int flags);
+  [DllImport("user32.dll")] public static extern bool GetMonitorInfo(IntPtr m, ref MonitorInfo i);
+  [DllImport("user32.dll")] public static extern void keybd_event(byte key, byte scan, int flags, IntPtr extra);
+  [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left, Top, Right, Bottom; }
+  [StructLayout(LayoutKind.Sequential)] public struct MonitorInfo { public int Size; public Rect Monitor, Work; public int Flags; }
 }
 '@
 $script:target = [IntPtr]::Zero
@@ -232,6 +248,22 @@ if ($RequestedAction -eq 'close') {
 } else {
   [void][OwnedFightWindow]::ShowWindow($target, 9)
   if (-not [OwnedFightWindow]::SetForegroundWindow($target)) { exit 1 }
+  if ($RequestedAction -eq 'fullscreen') {
+    $rect = New-Object OwnedFightWindow+Rect
+    $info = New-Object OwnedFightWindow+MonitorInfo
+    $info.Size = [Runtime.InteropServices.Marshal]::SizeOf($info)
+    if (-not [OwnedFightWindow]::GetWindowRect($target, [ref]$rect)) { exit 1 }
+    if (-not [OwnedFightWindow]::GetMonitorInfo([OwnedFightWindow]::MonitorFromWindow($target, 2), [ref]$info)) { exit 1 }
+    $borderless = ([OwnedFightWindow]::GetWindowLong($target, -16) -band 0x00C00000) -eq 0
+    $alreadyFullscreen = $borderless -and $rect.Left -le $info.Monitor.Left -and $rect.Right -ge $info.Monitor.Right -and
+                         $rect.Top -le $info.Monitor.Top -and $rect.Bottom -ge $info.Monitor.Bottom
+    if (-not $alreadyFullscreen) {
+      [OwnedFightWindow]::keybd_event(0x12, 0, 0, [IntPtr]::Zero)
+      [OwnedFightWindow]::keybd_event(0x0D, 0, 0, [IntPtr]::Zero)
+      [OwnedFightWindow]::keybd_event(0x0D, 0, 2, [IntPtr]::Zero)
+      [OwnedFightWindow]::keybd_event(0x12, 0, 2, [IntPtr]::Zero)
+    }
+  }
 }
 Write-Output 'found'
 '''
@@ -260,6 +292,8 @@ def _window_action(role: str, token: str, action: str) -> bool:
             window = next((fields[0] for fields in windows if len(fields) == 4 and fields[3] == title), None)
             if window is None:
                 return action == "close"  # Already closed is a successful close.
+            if action == "fullscreen":
+                _run(["wmctrl", "-ir", window, "-b", "add,fullscreen"])
             _run(["wmctrl", "-ic" if action == "close" else "-ia", window])
             return True
     except (OSError, subprocess.SubprocessError):
@@ -275,6 +309,11 @@ def close_owned_window(role: str, token: str) -> bool:
 def focus_player(token: str) -> bool:
     """Return focus to the matching player, including an existing shell."""
     return _window_action("player", token, "focus")
+
+
+def fullscreen_player(token: str) -> bool:
+    """Focus the matching player and enter fullscreen without toggling it off."""
+    return _window_action("player", token, "fullscreen")
 
 
 def schedule_player_close(token: str) -> bool:
@@ -433,8 +472,22 @@ class WindowPair:
             time.sleep(0.15)
             if not close_owned_window("wizard", token):
                 details.append("Close the wizard window manually if it remains open.")
-            if not focus_player(token):
-                details.append("Select the player's terminal to continue.")
+            restored = fullscreen_player(token)
+            if not restored and platform.system() == "Linux" and not _is_wsl():
+                # X11 may briefly report BadWindow while enumerating the wizard
+                # it just destroyed. Retry after that window-manager update.
+                for _ in range(2):
+                    time.sleep(0.1)
+                    restored = fullscreen_player(token)
+                    if restored:
+                        break
+            if restored:
+                # Allow the terminal resize to settle before the epilogue.
+                time.sleep(0.2)
+            else:
+                details.append("Make the player's terminal fullscreen manually.")
+                if not focus_player(token):
+                    details.append("Select the player's terminal to continue.")
         finally:
             # A missing desktop API must never strand the game in its ending.
             self.events.put(("wizard_closed", " ".join(details)))

@@ -70,7 +70,7 @@ To test the fight directly, bypassing earlier puzzles:
 python3.12 game.py --fight
 ```
 
-After the spell misses, Enter advances to Level 11 using the same two windows
+After the spell misses, the game automatically advances to Level 11 using the same two windows
 and socket connection. The wizard casts a final spell and the player sees
 "There's no taking this one back!" Ctrl+Z (`\x1a`) undoes it. One press is enough:
 if pressed before the spell arrives, the input is remembered; repeated presses
@@ -82,7 +82,9 @@ The wizard's eight-second death sequence includes impact particles and a brief
 amber flash, recoil, corrupted and missing body sections, falling fragments,
 and increasingly dense simulated errors. Its final fatal frame is visible
 before the wizard process exits and its actual terminal window closes. Focus
-returns to the player and a separate `ESCAPE TERMINAL` epilogue appears with a
+returns to the player, its terminal returns to fullscreen, and a separate
+epilogue displays "There's only one way to
+leave the terminal." with a
 subtle blinking cursor. Escape (`\x1b`) exits; arrow-key escape sequences do not.
 The player has ready, recoil and victory poses, with a face, outfit, hands and
 boots. Effects use bounded frames at 30 FPS; `NO_COLOR=1` disables their colour.

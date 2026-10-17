@@ -141,6 +141,9 @@ def play_fight(fd: int, *, start_level: int = 10, window_token: str | None = Non
                     # launcher identity for another attempt.
                     fight, error, retry_requested = None, "", False
                     continue
+                if fight.state == "complete":
+                    fight.begin_level(Level11())
+                    start_level = 11
                 sys.stdout.write(fight.render())
                 sys.stdout.flush()
             elif error:
@@ -154,12 +157,8 @@ def play_fight(fd: int, *, start_level: int = 10, window_token: str | None = Non
             if fight:
                 fight.handle_key(key)
             # q and control bytes keep the game's existing behavior. Enter
-            # retries a failed connection or advances a solved/template level.
+            # retries a failed connection.
             if key in ("\r", "\n"):
-                if fight and fight.state == "complete":
-                    fight.begin_level(Level11())
-                    start_level = 11
-                    continue
                 if error or (fight and fight.state == "failed"):
                     if fight:
                         start_level = fight.level.number

@@ -148,18 +148,24 @@ def draw_scene(role: str, size: tuple[int, int], status: str, note: str = "",
         put(glyph, int(x), min(max(1, lane), max(1, floor - 1)))
     for index, line in enumerate(footer):
         put(line, 0, rows - len(footer) + index)
-    return "\x1b[?25l" + "".join(
-        f"\x1b[{index + 1};1H\x1b[2K{''.join(line).rstrip()}"
-        for index, line in enumerate(canvas)
-    )
+    color = os.environ.get("TERM") != "dumb" and "NO_COLOR" not in os.environ
+    output = ["\x1b[?25l"]
+    for index, line in enumerate(canvas):
+        text = "".join(line).rstrip()
+        if x is not None and color and index == min(max(1, lane), max(1, floor - 1)):
+            start, end = max(0, int(x)), min(width, int(x) + len(glyph))
+            if start < end:
+                # Apply colour after layout so escape codes occupy no cells.
+                text = text[:start] + "\x1b[32m" + text[start:end] + "\x1b[39m" + text[end:]
+        output.append(f"\x1b[{index + 1};1H\x1b[2K{text}")
+    return "".join(output)
 
 
 def draw_epilogue(size: tuple[int, int], now: float, *, clear: bool = True) -> str:
     columns, rows = size
-    title = "ESCAPE TERMINAL"
-    rule = "=" * len(title)
+    message = "There's only one way to leave the terminal."
     cursor = "_" if int(now / 0.65) % 2 == 0 else " "
-    lines = [rule, title, rule, "", f"Press Escape to leave. {cursor}"]
+    lines = wrap(message, max(1, columns - 1)) + [cursor]
     top = max(0, (rows - len(lines)) // 2)
     output = []
     for index, line in enumerate(lines):
@@ -419,7 +425,7 @@ class PlayerFight:
                     self.player_x -= SPEED * elapsed
                 if self.player_x <= -len(SPELL):
                     self.state = "complete"
-                    self.status = "Spell dodged. Press Enter to continue."
+                    self.status = "Spell dodged."
                     self.peer.send({"type": "missed", "id": 1})
         except (OSError, ConnectionError) as error:
             self.fail(str(error))

@@ -37,6 +37,38 @@ class WindowLifecycleTests(unittest.TestCase):
             self.assertTrue(fight_windows.focus_player('private'))
         self.assertEqual(run.call_args_list[1].args[0], ['wmctrl', '-ia', '0x04'])
 
+    def test_x11_restores_only_the_player_to_fullscreen_without_toggling(self):
+        windows = '0x04 0 host Two Keys Player private\n0x05 0 host Two Keys Player private-extra\n'
+        with patch.dict(os.environ, {'XDG_SESSION_TYPE': 'x11'}, clear=True), \
+             patch.object(fight_windows.platform, 'system', return_value='Linux'), \
+             patch.object(fight_windows.platform, 'release', return_value='generic'), \
+             patch.object(fight_windows.shutil, 'which', return_value='/usr/bin/wmctrl'), \
+             patch.object(fight_windows, '_run', side_effect=[windows, '', '', windows, '', '']) as run:
+            self.assertTrue(fight_windows.fullscreen_player('private'))
+            self.assertTrue(fight_windows.fullscreen_player('private'))
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertEqual(commands.count(['wmctrl', '-ir', '0x04', '-b', 'add,fullscreen']), 2)
+        self.assertEqual(commands.count(['wmctrl', '-ia', '0x04']), 2)
+
+    def test_macos_fullscreen_sets_attribute_on_exact_player_window(self):
+        with patch.dict(os.environ, {}, clear=True), \
+             patch.object(fight_windows.platform, 'system', return_value='Darwin'), \
+             patch.object(fight_windows.platform, 'release', return_value='23.0'), \
+             patch.object(fight_windows, '_run', return_value='found\n') as run:
+            self.assertTrue(fight_windows.fullscreen_player('private'))
+        command = run.call_args.args[0]
+        self.assertEqual(command[-2:], ['Two Keys Player private', 'fullscreen'])
+        self.assertIn('set value of attribute "AXFullScreen" of window targetWindowName to true', command[2])
+
+    def test_wsl_fullscreen_checks_current_state_before_alt_enter(self):
+        with patch.dict(os.environ, {'WSL_DISTRO_NAME': 'Ubuntu-Same'}, clear=True), \
+             patch.object(fight_windows, '_run', return_value='found\n') as run:
+            self.assertTrue(fight_windows.fullscreen_player('private'))
+        script = base64.b64decode(run.call_args.args[0][-1]).decode('utf-16le')
+        self.assertIn("$TargetTitle = 'Two Keys Player private'", script)
+        self.assertIn("$RequestedAction = 'fullscreen'", script)
+        self.assertIn('if (-not $alreadyFullscreen)', script)
+
     def test_invalid_or_generic_identities_never_reach_desktop(self):
         with patch.object(fight_windows, '_run') as run:
             for role, token in [('terminal', 'private'), ('wizard', ''), ('wizard', "'; write evil")]:
@@ -84,15 +116,41 @@ class WindowLifecycleTests(unittest.TestCase):
         pair.closed.set()
         pair.events = queue.SimpleQueue()
         with patch.object(fight_windows.time, 'sleep') as delay, \
+             patch.object(fight_windows.platform, 'system', return_value='Darwin'), \
              patch.object(fight_windows, 'close_owned_window', return_value=False) as close, \
+             patch.object(fight_windows, 'fullscreen_player', return_value=False) as fullscreen, \
              patch.object(fight_windows, 'focus_player', return_value=False) as focus:
             pair._finish_wizard('private')
         delay.assert_called_once_with(0.15)
         close.assert_called_once_with('wizard', 'private')
+        fullscreen.assert_called_once_with('private')
         focus.assert_called_once_with('private')
         event, detail = pair.events.get_nowait()
         self.assertEqual(event, 'wizard_closed')
         self.assertIn('manually', detail)
+
+    def test_finish_fullscreens_player_before_releasing_epilogue(self):
+        pair = object.__new__(fight_windows.WindowPair)
+        pair.events = queue.SimpleQueue()
+        actions = []
+        with patch.object(fight_windows.time, 'sleep'), \
+             patch.object(fight_windows, 'close_owned_window', side_effect=lambda *args: actions.append('close-wizard') or True), \
+             patch.object(fight_windows, 'fullscreen_player', side_effect=lambda *args: actions.append('fullscreen-player') or True):
+            pair._finish_wizard('private')
+        self.assertEqual(actions, ['close-wizard', 'fullscreen-player'])
+        self.assertEqual(pair.events.get_nowait(), ('wizard_closed', ''))
+
+    def test_finish_retries_transient_x11_window_removal_race(self):
+        pair = object.__new__(fight_windows.WindowPair)
+        pair.events = queue.SimpleQueue()
+        with patch.object(fight_windows.time, 'sleep'), \
+             patch.object(fight_windows.platform, 'system', return_value='Linux'), \
+             patch.object(fight_windows, '_is_wsl', return_value=False), \
+             patch.object(fight_windows, 'close_owned_window', return_value=True), \
+             patch.object(fight_windows, 'fullscreen_player', side_effect=[False, True]) as fullscreen:
+            pair._finish_wizard('private')
+        self.assertEqual(fullscreen.call_count, 2)
+        self.assertEqual(pair.events.get_nowait(), ('wizard_closed', ''))
 
     def test_finish_request_is_idempotent(self):
         pair = object.__new__(fight_windows.WindowPair)
