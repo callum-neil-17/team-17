@@ -2,7 +2,7 @@ import sys
 import termios
 import tty
 
-from levels import Level1, Level2, Level3, Level4, Level5
+from levels import Level1, Level2, Level3, Level4, Level5, Level6
 
 
 def render_screen(content: str) -> None:
@@ -12,7 +12,7 @@ def render_screen(content: str) -> None:
 
 
 def main() -> None:
-    levels = [Level1(), Level2(), Level3(), Level4(), Level5()]
+    levels = [Level1(), Level2(), Level3(), Level4(), Level5(),Level6()]
     level_index = 0
     fd = sys.stdin.fileno()
     original_settings = termios.tcgetattr(fd)
