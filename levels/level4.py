@@ -1,3 +1,5 @@
+from textwrap import fill
+
 from .level import Level
 
 # Pint glass draining, one frame per string. Raw strings keep the backslashes intact.
@@ -44,6 +46,26 @@ DRINK_FRAMES = [
 """,
 ]
 
+
+def _drink_reaction_frame(bubble_y: int | None, bubble_x: int = 4) -> str:
+    rows = DRINK_FRAMES[0].strip("\n").splitlines()
+    width = max(map(len, rows))
+    canvas = [list(row.ljust(width)) for row in rows]
+    if bubble_y is not None:
+        canvas[bubble_y][bubble_x] = "o" if bubble_y % 2 else "O"
+        canvas[1][1:10] = ("~~^~~~~~~" if bubble_y % 2 else "~~~~~~^~~")
+    return "\n".join("".join(row) for row in canvas)
+
+
+WRONG_FRAMES = [
+    _drink_reaction_frame(6, 3),
+    _drink_reaction_frame(5, 4),
+    _drink_reaction_frame(4, 5),
+    _drink_reaction_frame(3, 4),
+    _drink_reaction_frame(2, 5),
+    _drink_reaction_frame(None),
+]
+
 # F5 arrives as an escape sequence, one character at a time. Most terminals
 # send the first form; the Linux console sends the second.
 F5_SEQUENCES = ("\x1b[15~", "\x1b[[E")
@@ -58,7 +80,12 @@ class Level4(Level):
             title="Level 4",
             required_input=(*F5_SEQUENCES, CTRL_R),
             art=DRINK_FRAMES,
+            description=fill(
+                "The bartender hands you a drink.",
+                width=70,
+            ),
             prompt="You take a drink... ahhh, how refreshing!",
+            wrong_frames=WRONG_FRAMES,
         )
         self.recent_keys = ""
 

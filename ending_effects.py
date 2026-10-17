@@ -10,6 +10,7 @@ import os
 import socket
 from textwrap import dedent, wrap
 
+from callback_art import BOOK_ART, MUG_ART, RECEIPT_ART
 from levels.level1 import WIZARD
 
 
@@ -236,6 +237,35 @@ def _panic_message(progress: float) -> str:
     return PANIC_MESSAGES[3]
 
 
+def _panic_memory(canvas: _Canvas, progress: float, index: int,
+                  art_left: int, footer_top: int) -> None:
+    """Recall an earlier scene's object, then lose its reference with the wizard."""
+    if not 0.46 <= progress < 0.86:
+        return
+    source = (MUG_ART, RECEIPT_ART, BOOK_ART)[index % 3].splitlines()
+    width = max(map(len, source), default=0)
+    height = len(source)
+    if width > canvas.width or height + 1 > footer_top:
+        return
+    # Keep the small memory beside the collapsing figure and above its plea.
+    left = ((art_left - width) // 2 if art_left >= width + 2
+            else max(0, canvas.width - width - 1))
+    top = max(1, footer_top - height - 1)
+    damage = max(0.0, (progress - 0.64) / 0.22)
+    for row, original in enumerate(source):
+        line = original
+        if damage:
+            line = "".join(
+                (" " if _noise(row, column, index + 9) % 3 else "#%?"[column % 3])
+                if char != " " and _noise(row, column, index + 43) % 100 < damage * 120
+                else char for column, char in enumerate(original)
+            )
+        target_row = top + row + int(damage * 2)
+        if target_row < footer_top:
+            shift = int(damage * (2 if row % 2 else -2))
+            canvas.put(line, left + shift, target_row, "dim")
+
+
 def _panic_picture(canvas: _Canvas, elapsed: float, index: int, duration: float) -> None:
     progress = min(1.0, elapsed / max(0.1, duration))
     tick = int(elapsed * 6)
@@ -266,6 +296,8 @@ def _panic_picture(canvas: _Canvas, elapsed: float, index: int, duration: float)
             target_row, target_left = art_top + row, art_left + shift
         if progress < 0.96:
             canvas.put(line, target_left, target_row, "wizard" if progress < 0.38 else "dim")
+    _panic_memory(canvas, progress, index, art_left,
+                  canvas.height - len(message_lines) - 1)
     if progress >= 0.88:
         canvas.center("[ no live references ]", max(1, canvas.height // 2), "dim")
     for offset, line in enumerate(message_lines):

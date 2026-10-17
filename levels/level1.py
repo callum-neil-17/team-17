@@ -83,14 +83,38 @@ STARS = (
 )
 
 
+def _staff_reaction() -> list[str]:
+    """Let the staff flare without changing the wizard used by the fight."""
+    neutral = WIZARD[0].strip("\n").splitlines()
+    width = max(map(len, neutral))
+    frames = ["\n".join(row.ljust(width) for row in neutral)]
+    sparks = (
+        ("         ", "    .    ", "   .*.   ", "  / | \\  ", "   ' '   ", "   ||    "),
+        ("  \\ | /  ", " -- * -- ", "  / | \\  ", " .  *  . ", "   / \\   ", "   ||    "),
+        (" .     . ", "   \\|/   ", " -- * -- ", "   /|\\   ", "  '   '  ", "   ||    "),
+        ("         ", "  .   .  ", "    *    ", "   /|\\   ", "   ' '   ", "   ||    "),
+        ("         ", "         ", "    .    ", "   .*.   ", "         ", "   ||    "),
+    )
+    for spark in sparks:
+        canvas = [list(row.ljust(width)) for row in neutral]
+        for row, pattern in enumerate(spark):
+            canvas[row][3:12] = pattern
+        frames.append("\n".join("".join(row) for row in canvas))
+    return frames + [frames[0]]
+
+
+WRONG_FRAMES = _staff_reaction()
+
+
 class Level1(Level):
     def __init__(self) -> None:
         super().__init__(
             number=1,
             title="Level 1",
-            required_input=("y", "\n"),
+            required_input=("y", "Y", "\n"),
             art=WIZARD,
             prompt="I have trapped You in the terminal. You cannot esc. You must solve each riddle using an input(/s) on your keypad. Press 'Y' to continue ",
+            wrong_frames=WRONG_FRAMES,
         )
         self.layout = "level2"
         self.idle_frame_delay = 0.4
@@ -106,7 +130,7 @@ class Level1(Level):
 
         phases = " .+*+. "
         for column, row, offset in STARS:
-            if canvas[row][column] == " ":
+            if row < len(canvas) and column < width and canvas[row][column] == " ":
                 canvas[row][column] = phases[(self.idle_frame + frame + offset) % len(phases)]
 
         # Keep the width fixed so centring doesn't shift as stars disappear.

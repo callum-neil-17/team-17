@@ -22,6 +22,7 @@ from ending_effects import (CLUE, CRASH_DURATION, PANIC_MESSAGES, REOPEN_TAUNT,
                             render_fallback_panic, render_panic, render_true_end,
                             shell_context)
 from fight import JsonPeer
+from callback_art import BOOK_ART, MUG_ART, RECEIPT_ART
 
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -36,6 +37,16 @@ def lines(screen):
 
 def text(screen):
     return "\n".join(line.rstrip() for _, _, line in lines(screen))
+
+
+def contains_art(screen, art):
+    rows = [line for _, _, line in lines(screen)]
+    source = art.splitlines()
+    width = max(map(len, source))
+    return any(all(rows[top + row][left:left + len(line)] == line
+                   for row, line in enumerate(source))
+               for top in range(len(rows) - len(source) + 1)
+               for left in range(len(rows[top]) - width + 1))
 
 
 class FinaleEffectsTests(unittest.TestCase):
@@ -161,6 +172,33 @@ class FinaleEffectsTests(unittest.TestCase):
         self.assertEqual(references(0, duration=4), ["01"])
         self.assertEqual(references(0.8, duration=4), ["01", "02", "03", "04", "05", "06"])
         self.assertEqual(references(4, duration=4), [])
+
+    def test_final_panic_recalls_earlier_scene_objects_then_deletes_them(self):
+        memories = (MUG_ART, RECEIPT_ART, BOOK_ART)
+        for index in range(6):
+            memory = memories[index % len(memories)]
+            with self.subTest(index=index):
+                start = render_panic((100, 30), 0, index=index, duration=6)
+                recalled = render_panic((100, 30), 3, index=index, duration=6)
+                corrupted = render_panic((100, 30), 4.6, index=index, duration=6)
+                deleted = render_panic((100, 30), 5.5, index=index, duration=6)
+                self.assertFalse(contains_art(start, memory))
+                self.assertTrue(contains_art(recalled, memory))
+                self.assertFalse(contains_art(corrupted, memory))
+                self.assertFalse(contains_art(deleted, memory))
+                self.assertIn("wizard@local / reference", text(recalled).splitlines()[0])
+                self.assertEqual(lines(recalled)[-2][2].strip(), PANIC_MESSAGES[1])
+                self.assertEqual(lines(deleted)[-2][2].strip(), PANIC_MESSAGES[-1])
+                self.assertEqual(recalled, render_panic((100, 30), 3.01, index=index, duration=6))
+
+    def test_inline_panic_reuses_the_same_memory_without_obscuring_its_footer(self):
+        recalled = render_fallback_panic((200, 70), 4.5)
+        self.assertTrue(contains_art(recalled, BOOK_ART))
+        self.assertEqual(text(recalled).splitlines()[-1].strip(), PANIC_MESSAGES[1])
+        deleted = render_fallback_panic((200, 70), 8)
+        self.assertFalse(any(contains_art(deleted, memory)
+                             for memory in (MUG_ART, RECEIPT_ART, BOOK_ART)))
+        self.assertEqual(text(deleted).strip(), PANIC_MESSAGES[-1])
 
     def test_animation_is_quantized_and_final_title_has_a_blank_beat(self):
         for renderer in (render_panic, render_fallback_panic):

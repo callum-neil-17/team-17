@@ -11,6 +11,33 @@ from fight import FRAME_TIME, SPELL, SPEED, JsonPeer, draw_scene, terminal_size,
 from fight_effects import DEATH_DURATION, render_death
 
 
+class WizardReaction:
+    """One short local gesture; it never changes spell or fight state."""
+
+    def __init__(self) -> None:
+        self.started: float | None = None
+
+    def start(self, number: object, level_number: int, state: str, now: float) -> bool:
+        waiting = (level_number == 10 and state == "handed_off"
+                   or level_number == 11 and state == "ready")
+        if number != level_number or not waiting or self.frame(now) is not None:
+            return False
+        self.started = now
+        return True
+
+    def frame(self, now: float) -> int | None:
+        if self.started is None:
+            return None
+        frame = int(max(0.0, now - self.started) / 0.12)
+        if frame >= 4:
+            self.clear()
+            return None
+        return frame
+
+    def clear(self) -> None:
+        self.started = None
+
+
 def run(port: int, token: str) -> None:
     peer = None
     try:
@@ -28,6 +55,7 @@ def run(port: int, token: str) -> None:
         ready_pending = False
         death_started = 0.0
         death_sent = False
+        reaction = WizardReaction()
         color = os.environ.get("TERM") != "dumb" and "NO_COLOR" not in os.environ
         while True:
             now = time.monotonic()
@@ -41,6 +69,7 @@ def run(port: int, token: str) -> None:
                 if kind == "ping":
                     peer.send({"type": "pong"})
                 elif kind == "level":
+                    reaction.clear()
                     level_number = int(message["number"])
                     description = str(message["description"])
                     if state != "waiting":
@@ -52,16 +81,24 @@ def run(port: int, token: str) -> None:
                     if state == "waiting":
                         state, ready_pending = "ready", True
                 elif kind == "cast" and state == "ready" and level_number == 10:
+                    reaction.clear()
                     cast_id = message["id"]
                     glyph, row, speed = message["glyph"], int(message["row"]), float(message["speed"])
                     x = float(max(0, wizard_left(size[0]) - len(glyph)))
                     status, state = "", "casting"
                 elif kind == "dodge":
+                    reaction.clear()
                     status = ""
                 elif kind == "missed":
+                    reaction.clear()
                     status = ""
+                elif kind == "wrong_guess":
+                    reaction.start(message.get("number"), level_number, state, now)
+                elif kind == "undo" and level_number == 11 and state == "ready":
+                    reaction.clear()
                 elif (kind == "return" and level_number == 11 and state == "ready"
                       and message.get("id") == 2):
+                    reaction.clear()
                     cast_id = 2
                     glyph, row, speed = message["glyph"], int(message["row"]), float(message["speed"])
                     state, status, x = "returning", "", -float(len(glyph))
@@ -103,7 +140,8 @@ def run(port: int, token: str) -> None:
             sys.stdout.write(draw_scene("wizard", size, status, note,
                                         frame=0 if level_number == 11 and state == "ready" else int((now - started) / 0.35),
                                         x=x, row=row, glyph=glyph,
-                                        level_number=level_number, description=description))
+                                        level_number=level_number, description=description,
+                                        wizard_reaction=reaction.frame(now)))
             sys.stdout.flush()
             if ready_pending:
                 peer.send({"type": "ready"})

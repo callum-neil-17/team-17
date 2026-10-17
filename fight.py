@@ -103,6 +103,21 @@ def wizard_sprite(frame: int) -> list[str]:
     return dedent(WIZARD[frame % len(WIZARD)]).strip("\n").splitlines()
 
 
+def wizard_wrong_sprite(frame: int) -> list[str]:
+    """A brief head shake and staff flick using the established silhouette."""
+    sprite = wizard_sprite(0)
+    # Move only the hat/head and staff flare; robe and feet remain anchored.
+    shift = (-1, 1, -1, 0)[frame % 4]
+    for index in range(min(6, len(sprite))):
+        line = sprite[index]
+        if shift < 0:
+            sprite[index] = line[1:] + " "
+        elif shift > 0:
+            sprite[index] = " " + line
+    sprite[4] = sprite[4].replace("= ,. =", "- ** -")
+    return sprite
+
+
 def wizard_left(columns: int) -> int:
     return max(1, columns - 3 - max(len(line) for frame in range(len(WIZARD))
                                   for line in wizard_sprite(frame)))
@@ -112,7 +127,9 @@ def draw_scene(role: str, size: tuple[int, int], status: str, note: str = "",
                frame: int = 0, x: float | None = None, row: int = 10,
                glyph: str = SPELL, level_number: int = 10,
                description: str = "", player_step: float = 0.0,
-               pose: str = "ready", spell_lane: int | None = None) -> str:
+               pose: str = "ready", spell_lane: int | None = None,
+               player_sprite: str | None = None,
+               wizard_reaction: int | None = None) -> str:
     columns, rows = size
     # Leave the last column unused to avoid terminal autowrap in raw mode.
     width = max(1, columns - 1)
@@ -133,12 +150,12 @@ def draw_scene(role: str, size: tuple[int, int], status: str, note: str = "",
     # Keep the characters anchored when there is no routine footer text.
     floor = rows - max(1, len(footer)) - 1
     if role == "wizard":
-        sprite = wizard_sprite(frame)
+        sprite = wizard_sprite(frame) if wizard_reaction is None else wizard_wrong_sprite(wizard_reaction)
         # Keep the wand near the shared spell lane, including in tall windows.
         left = wizard_left(columns)
         top = max(art_top, min(row - 4, floor - len(sprite)))
     else:
-        sprite = PLAYER_POSES[pose].splitlines()
+        sprite = (PLAYER_POSES[pose] if player_sprite is None else player_sprite).splitlines()
         # A back step moves left and away from the spell's original lane.
         left = 2 - round(2 * player_step)
         top = max(art_top, min(row - PLAYER_HAND_ROW + round(3 * player_step), floor - len(sprite)))
@@ -240,6 +257,7 @@ class PlayerFight:
         self._start_level(self.last_tick)
 
     def _start_level(self, now: float) -> None:
+        self.level.clear_reaction()
         if self.level.number == 11:
             self.state = "awaiting_undo"
             self.status = ""
@@ -257,9 +275,18 @@ class PlayerFight:
                         "row": self.row, "speed": self.spell_speed})
 
     def _launch_undo_spell(self) -> None:
+        reaction_active = self.level.reaction_frame is not None
+        self.level.clear_reaction()
         self.player_x = STOP_X
         self.state = "return_player"
         self.status = ""
+        if reaction_active and self.peer:
+            try:
+                # Clear a local wizard gesture as soon as undo is accepted;
+                # the spell still crosses later through the usual handoff.
+                self.peer.send({"type": "undo", "id": 2})
+            except OSError as error:
+                self.fail(str(error))
 
     def _disconnect(self) -> None:
         if self.peer:
@@ -291,6 +318,7 @@ class PlayerFight:
                 self._launch_undo_spell()
             return
         if self.state == "awaiting_dodge" and self.level.check_input(key):
+            self.level.clear_reaction()
             self.state = "dodging"
             self.dodge_started = self.last_tick
             self.status = ""
@@ -298,6 +326,13 @@ class PlayerFight:
                 self.peer.send({"type": "dodge", "id": 1})
             except OSError as error:
                 self.fail(str(error))
+            return
+        if self.state in ("awaiting_dodge", "awaiting_undo"):
+            if self.level.react_to_wrong_input(key, now=self.last_tick) and self.peer:
+                try:
+                    self.peer.send({"type": "wrong_guess", "number": self.level.number})
+                except OSError as error:
+                    self.fail(str(error))
 
     def _message(self, message: dict, now: float) -> None:
         kind = message["type"]
@@ -343,6 +378,7 @@ class PlayerFight:
         now = time.monotonic() if now is None else now
         elapsed = max(0.0, now - self.last_tick)
         self.last_tick = now
+        self.level.update_reaction(now)
         try:
             if self.windows:
                 while not self.windows.events.empty():
@@ -458,12 +494,17 @@ class PlayerFight:
         visible_row = self.row
         if self.state == "dodging":
             visible_row -= round((PLAYER_HAND_ROW + 1) * self.player_step)
+        player_sprite = None
+        if (self.state in ("awaiting_dodge", "awaiting_undo")
+                and self.level.reaction_frame is not None):
+            player_sprite = self.level.wrong_frames[self.level.reaction_frame]
         return draw_scene("player", self.size, self.status, self.note,
                           x=self.player_x if self.state in ("player_spell", "awaiting_dodge", "dodging", "return_player") else None,
                           row=self.row, level_number=self.level.number,
                           description=self.level.prompt, player_step=self.player_step,
                           glyph=SPELL[::-1] if self.state == "return_player" else SPELL, pose=pose,
-                          spell_lane=visible_row)
+                          spell_lane=visible_row,
+                          player_sprite=player_sprite)
 
     def close(self) -> None:
         self._disconnect()

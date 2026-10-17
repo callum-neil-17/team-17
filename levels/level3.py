@@ -281,6 +281,39 @@ BAR_FRAMES = [
 ]
 
 
+def _bartender_reaction_frame(scene: str, shift: int,
+                              wave: int | None = None) -> str:
+    rows = scene.strip("\n").splitlines()
+    width = max(map(len, rows))
+    canvas = [list(row.ljust(width)) for row in rows]
+
+    def put(text: str, x: int, y: int) -> None:
+        canvas[y][x:x + len(text)] = text
+
+    if wave is not None:
+        raised = BAR_FRAMES[1].strip("\n").splitlines()
+        for y in range(7, 12):
+            canvas[y][35:44] = raised[y][35:44].ljust(9)
+        canvas[7][37:44] = " " * 7
+        canvas[8][37:44] = " " * 7
+        put("(o)", 39 + wave, 7)
+        put("/ /", 38 + wave, 8)
+    # A small headshake leaves the shelves, counter and stools untouched.
+    for y in range(5, 9):
+        canvas[y][27:37] = " " * 10
+    put(".----.", 28 + shift, 5)
+    put("|////|", 28 + shift, 6)
+    put("|>  <|", 29 + shift, 7)
+    put("| /\\ |", 29 + shift, 8)
+    return "\n".join("".join(row) for row in canvas)
+
+
+WRONG_FRAMES = [
+    _bartender_reaction_frame(BAR_FRAMES[0], shift)
+    for shift in (-1, 1, -1, 1, 0)
+] + ["\n".join(row.ljust(68) for row in BAR_FRAMES[0].strip("\n").splitlines())]
+
+
 class Level3(Level):
     def __init__(self) -> None:
         super().__init__(
@@ -292,6 +325,7 @@ class Level3(Level):
                 "You have entered a bar located on the planet cache. You currently do not have any money",
                 width=70,
             ),
+            wrong_frames=WRONG_FRAMES,
             prompt=fill(
                 'Bartender: "Staying for a few drinks? '
                 'Do you want to pay now or open a tab? ',

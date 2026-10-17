@@ -1,5 +1,7 @@
+from textwrap import fill
+
 from .level import Level
-from .level3 import BAR_FRAMES
+from .level3 import BAR_FRAMES, _bartender_reaction_frame
 
 
 PLAYER_AT_BAR = r"""
@@ -88,6 +90,12 @@ PAYMENT_FRAMES = [
 ]
 
 
+WRONG_FRAMES = [
+    _bartender_reaction_frame(PAYMENT_FRAMES[0], shift, wave)
+    for shift, wave in ((-1, -1), (1, 1), (-1, -1), (1, 1), (0, 0))
+] + ["\n".join(row.ljust(68) for row in PAYMENT_FRAMES[0].splitlines())]
+
+
 class Level6(Level):
     def __init__(self) -> None:
         super().__init__(
@@ -95,8 +103,12 @@ class Level6(Level):
             title="Level 6",
             required_input=("\x17",),  # Ctrl+W is a raw input byte.
             art=PAYMENT_FRAMES,
-            description="You go back to the bar now since you have the money",
+            description=fill(
+                "You return to the bar with 100 credits to settle the tab.",
+                width=70,
+            ),
             prompt="you can close your tab now",
+            wrong_frames=WRONG_FRAMES,
         )
         self.frame_delay = 0.25
         self.frame_delays[len(self.frames) - 1] = 1.2

@@ -32,6 +32,26 @@ During the new finale, Ctrl+C is always an emergency exit, including during
 animations. Level 12 remains available as a template file, but the finished
 wizard fight leads directly to the epilogue and finale.
 
+Wrong guesses in Levels 1-11 trigger brief animations in the ASCII drawings:
+the door rattles, the bartender reacts, the ATM flickers, and other objects
+move within their scenes. These add no dialogue and do not advance the puzzle.
+Repeated keys cannot restart an animation while it is playing; correct answers
+interrupt it immediately and play the usual success sequence. During the
+fight, both the player and the wizard react locally to one socket event.
+Edit the frames passed as `wrong_frames` in each level file to change its
+reaction artwork; `wrong_frame_delay` controls its timing independently of the
+success animation.
+
+The scenes follow a connected story: the drink leads to an unpaid bar tab,
+the ATM provides the payment, and the MMU book reveals the bus destination
+127.0.0.1. Each scene shows its own artwork without carried-item displays.
+
+During the final wizard-copy breakdown, the earlier mug, paid tab and MMU
+book briefly reappear as memories, then fragment and disappear before
+`WIZARD_PROCESS_NOT_FOUND` and `THE END`. The callback is shared by real panic
+windows and the inline fallback, without adding time or another key press.
+`callback_art.py` holds the small drawings used only by this final callback.
+
 Level 1 has a gently blinking star field around the wizard while it waits for
 input. Star positions stay fixed and their brightness changes every 0.4 seconds.
 The wizard artwork shared with the final fight stays the same.

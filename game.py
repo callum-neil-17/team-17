@@ -223,19 +223,29 @@ def main(start_fight: bool = False, start_ending: bool = False,
 
         while True:
             if level_index < len(levels) and isinstance(levels[level_index], Level10):
-                escaped = play_fight(fd, start_level=11 if start_ending else 10, window_token=player_token)
+                escaped = play_fight(fd, start_level=11 if start_ending else 10,
+                                     window_token=player_token)
                 if escaped:
                     run_finale(fd, player_token, inline=inline_ending, read_input=read_key)
                 break
             level = levels[level_index] if level_index < len(levels) else None
             timeout = None
-            if level is not None and level.idle_frame_delay is not None:
+            if level is not None:
                 now = time.monotonic()
-                if now >= next_idle_frame:
+                redraw = level.update_reaction(now)
+                deadlines = []
+                if level.idle_frame_delay is not None and now >= next_idle_frame:
                     level.idle_frame += 1
-                    render_screen(level.render(), level.layout)
                     next_idle_frame = now + level.idle_frame_delay
-                timeout = max(0.0, next_idle_frame - time.monotonic())
+                    redraw = True
+                if redraw:
+                    render_screen(level.render(), level.layout)
+                if level.idle_frame_delay is not None:
+                    deadlines.append(next_idle_frame)
+                if level.reaction_deadline is not None:
+                    deadlines.append(level.reaction_deadline)
+                if deadlines:
+                    timeout = max(0.0, min(deadlines) - now)
             key = read_key(fd, timeout=timeout)
 
             # EOF means the terminal disconnected, not that Ctrl+D was pressed.
@@ -255,6 +265,7 @@ def main(start_fight: bool = False, start_ending: bool = False,
             level = levels[level_index]
             previous_screen = level.render()
             if level.check_input(key):
+                level.clear_reaction()
                 if not play_frames(levels[level_index], fd):
                     break
                 level_index += 1
@@ -265,6 +276,7 @@ def main(start_fight: bool = False, start_ending: bool = False,
                 elif level_index == len(levels):
                     render_screen("Game complete! Press q to quit.\r\n")
             else:
+                level.react_to_wrong_input(key)
                 # A puzzle can update its scene without advancing the level.
                 current_screen = level.render()
                 if current_screen != previous_screen:

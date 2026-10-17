@@ -1,3 +1,5 @@
+from textwrap import fill
+
 from .level import Level
 
 FALLING_TREE_ART = [
@@ -170,6 +172,27 @@ FALLING_TREE_ART = [
     """
 ]
 
+
+def _tree_reaction() -> list[str]:
+    """Sway the upper branches; the trunk and wizard's house stay rooted."""
+    neutral = FALLING_TREE_ART[0].strip("\n").splitlines()
+    width = max(map(len, neutral))
+    frames = []
+    for shift in (0, 1, 2, 0, -2, -1, 0):
+        canvas = [list(row.ljust(width)) for row in neutral]
+        for row in range(13):
+            sway = shift if row < 8 else (1 if shift > 0 else -1 if shift < 0 else 0)
+            canvas[row] = list(" " * width)
+            for column, char in enumerate(neutral[row]):
+                if char != " " and 0 <= column + sway < width:
+                    canvas[row][column + sway] = char
+        frames.append("\n".join("".join(row) for row in canvas))
+    return frames
+
+
+WRONG_FRAMES = _tree_reaction()
+
+
 class Level9(Level):
     def __init__(self) -> None:
         super().__init__(
@@ -178,6 +201,11 @@ class Level9(Level):
             # \x18 is the standard ASCII hex code for Ctrl+X
             required_input=("\x18",), 
             art=FALLING_TREE_ART,
+            description=fill(
+                "The address leads you to the wizard's Directory Tree.",
+                width=70,
+            ),
             prompt="The Wizard has taken root in the Directory Tree. Oh look theres a chainsaw. CUT IT DOWN !!!!",
+            wrong_frames=WRONG_FRAMES,
         )
-        self.layout = "level10" 
+        self.layout = "level10"

@@ -61,6 +61,32 @@ DOOR_FRAMES = [
 """,
 ]
 
+
+def _door_rattle_frame(shift: int, handle: str) -> str:
+    rows = DOOR_FRAMES[0].strip("\n").splitlines()
+    width = max(map(len, rows))
+    canvas = [list(row.ljust(width)) for row in rows]
+    # Only the closed leaf moves; the frame and the Enter key stay still.
+    for y in (3, 4, 5, 8, 9, 10):
+        canvas[y][3:19] = " " * 16
+        for x in range(3, 19):
+            if rows[y][x] != " ":
+                canvas[y][x + shift] = rows[y][x]
+    canvas[7][15:19] = " " * 4
+    canvas[7][16 + shift:18 + shift] = handle
+    return "\n".join("".join(row) for row in canvas)
+
+
+WRONG_FRAMES = [
+    _door_rattle_frame(-1, " /"),
+    _door_rattle_frame(1, "--"),
+    _door_rattle_frame(-1, "\\ "),
+    _door_rattle_frame(1, "()"),
+    _door_rattle_frame(0, "--"),
+    _door_rattle_frame(0, "()"),
+]
+
+
 class Level2(Level):
     def __init__(self) -> None:
         super().__init__(
@@ -69,5 +95,6 @@ class Level2(Level):
             required_input=("\r", "\n"),
             art=DOOR_FRAMES,
             prompt="You are waiting behind a door",
+            wrong_frames=WRONG_FRAMES,
         )
         self.layout = "level2"

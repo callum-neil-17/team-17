@@ -1,4 +1,5 @@
 from .level import Level
+from .level10 import PLAYER_WRONG_FRAMES
 
 
 LEVEL11_FRAMES = [
@@ -20,4 +21,5 @@ class Level11(Level):
             art=LEVEL11_FRAMES,
             description="The wizard's spell is trapping you in the terminal.",
             prompt="Find a way to undo the wizard's spell trapping you in the terminal.",
+            wrong_frames=PLAYER_WRONG_FRAMES,
         )
