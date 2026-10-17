@@ -6,7 +6,21 @@ import termios
 import time
 import tty
 
-from levels import Level, Level1, Level2, Level3, Level4, Level5, Level6, Level7, Level8, Level9
+from levels import (
+    Level,
+    Level1,
+    Level2,
+    Level3,
+    Level4,
+    Level5,
+    Level6,
+    Level7,
+    Level8,
+    Level9,
+    Level10,
+    Level11,
+    Level12,
+)
 
 
 def _centered_lines(section: str, columns: int) -> list[str]:
@@ -94,7 +108,20 @@ def play_frames(level: Level, fd: int, frame_delay: float | None = None) -> bool
 
 
 def main() -> None:
-    levels = [Level1(), Level2(), Level3(), Level4(), Level5(), Level6(), Level7(), Level8(),Level9()]
+    levels = [
+        Level1(),
+        Level2(),
+        Level3(),
+        Level4(),
+        Level5(),
+        Level6(),
+        Level7(),
+        Level8(),
+        Level9(),
+        Level10(),
+        Level11(),
+        Level12(),
+    ]
     level_index = 0
     fd = sys.stdin.fileno()
     original_settings = termios.tcgetattr(fd)
