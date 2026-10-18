@@ -2,7 +2,7 @@ from textwrap import fill
 
 from .level import Level
 
-# Bus driving to the 127.0.0.1 stop, one frame per string. The first frame shows
+# Bus driving to the 0xDEADBEEF stop, one frame per string. The first frame shows
 # while the player decides; the rest play after they press "." to stop.
 BUS_FRAMES = [
     r"""
@@ -39,7 +39,7 @@ BUS_FRAMES = [
 """,
     r"""
                                                   .-----------.
-                                                  | 127.0.0.1 |
+                                                  | 0xDEADBEEF|
                                                o/ '-----+-----'
                                               /|        |
                                               / \       |
@@ -86,7 +86,7 @@ class Level8(Level):
             required_input=(".",),  # A full stop to get off at your stop.
             art=BUS_FRAMES,
             description=fill(
-                "The MMU book points to 127.0.0.1. You board the Memory Bus "
+                "The MMU book points to 0xDEADBEEF. You board the Memory Bus "
                 "to reach the wizard's address.",
                 width=70,
             ),
