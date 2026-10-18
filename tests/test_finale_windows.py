@@ -13,12 +13,10 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
-import ending_windows
-from ending_config import (FIRST_PANIC_CLOSE, MAX_PANIC_WINDOWS, PANIC_CLOSE_STEP,
+from ending import windows as ending_windows
+from ending.config import (FIRST_PANIC_CLOSE, MAX_PANIC_WINDOWS, PANIC_CLOSE_STEP,
                            PANIC_DURATION, PANIC_STAGGER, panic_close, panic_start)
-import fight_windows
-
-
+from fight import windows as fight_windows
 TOKEN = "a" * 32
 REAL_POPEN = subprocess.Popen
 
@@ -83,7 +81,7 @@ class EndingCommandTests(unittest.TestCase):
             command, env = ending_windows.launch_command(12345, TOKEN, "p3", "panic", 3)
         self.assertEqual(command[0], "/usr/bin/gnome-terminal")
         self.assertEqual(command[command.index("--") + 1:],
-                         ["/active/.venv/bin/python", "-B", str(ending_windows.PROJECT / "ending_window.py"),
+                         ["/active/.venv/bin/python", "-B", "-m", "ending.window",
                           "--port", "12345", "--token", TOKEN, "--window-id", "p3",
                           "--role", "panic", "--index", "3"])
         self.assertNotIn("GNOME_TERMINAL_SCREEN", env)
@@ -137,8 +135,9 @@ class EndingCommandTests(unittest.TestCase):
              patch.object(ending_windows, "PROJECT", Path("/Project With Spaces")):
             command, _ = ending_windows.launch_command(12345, TOKEN, "p1", "panic", 1)
         self.assertEqual(command[0], "osascript")
-        self.assertEqual(shlex.split(command[3])[1:4],
-                         ["/Python Path/bin/python", "-B", "/Project With Spaces/ending_window.py"])
+        self.assertEqual(shlex.split(command[3])[:8],
+                         ["cd", "/Project With Spaces", "&&", "exec",
+                          "/Python Path/bin/python", "-B", "-m", "ending.window"])
         self.assertIn("set custom title of gameTab", command[2])
         self.assertEqual(command[-1], ending_windows.ending_title(TOKEN, "p1", "panic"))
 
@@ -421,7 +420,7 @@ class EndingManagerTests(unittest.TestCase):
         self.assertTrue(ending_windows._same_command(expected, expected))
         for changed in (expected[:-1], (*expected[:-1], "2"),
                         tuple("other" if arg == TOKEN else arg for arg in expected),
-                        tuple("wizard.py" if arg.endswith("ending_window.py") else arg for arg in expected)):
+                        tuple("fight.wizard" if arg == "ending.window" else arg for arg in expected)):
             self.assertFalse(ending_windows._same_command(changed, expected))
 
     def test_x11_scatter_uses_exact_owned_title_and_desktop_work_area(self):
@@ -493,7 +492,9 @@ class ChildSelfCloseTests(unittest.TestCase):
              patch.object(ending_windows.os, "getpid", return_value=12345):
             self.assertTrue(ending_windows.close_ending_window(TOKEN, "p4", "panic"))
         command = popen.call_args.args[0]
+        self.assertEqual(command[:4], [sys.executable, "-B", "-m", "ending.windows"])
         self.assertEqual(command[-6:], ["--close", TOKEN, "p4", "panic", "--after-pid", "12345"])
+        self.assertEqual(popen.call_args.kwargs["cwd"], ending_windows.PROJECT)
         self.assertTrue(popen.call_args.kwargs["start_new_session"])
         self.assertNotIn("shell", popen.call_args.kwargs)
         with patch.object(fight_windows, "_process_alive", side_effect=[True, False]), \

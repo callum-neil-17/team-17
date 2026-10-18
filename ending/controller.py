@@ -13,13 +13,13 @@ import sys
 import time
 from typing import Callable
 
-from ending_effects import (
+from .effects import (
     CRASH_DURATION, render_fake_crash, render_fake_shell,
     render_fallback_panic, render_true_end, shell_context,
 )
-from ending_windows import EndingWindows
-from ending_config import MAX_PANIC_WINDOWS, PANIC_DURATION, PANIC_STAGGER, panic_close
-from fight import JsonPeer, terminal_size
+from .windows import EndingWindows
+from .config import MAX_PANIC_WINDOWS, PANIC_DURATION, PANIC_STAGGER, panic_close
+from fight.controller import JsonPeer, terminal_size
 from terminal_input import END, KeyReader
 
 

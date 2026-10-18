@@ -209,6 +209,7 @@ def render_death(size: tuple[int, int], elapsed: float, *, color: bool = True,
                 put(" " * width, 0, index)
             for index, line in enumerate(fatal):
                 centre(line, fatal_top + index, "fatal")
+            centre("CACHE FLUSH COMPLETE", height - 2, "magic")
             centre("PROCESS TERMINATED", height - 1, "error")
         else:
             centre("SYSTEM FAILURE", height - 1, "error")

@@ -7,8 +7,8 @@ import signal
 import unittest
 from unittest.mock import patch
 
-import ending
-from ending_config import MAX_PANIC_WINDOWS, panic_close
+from ending import controller as ending
+from ending.config import MAX_PANIC_WINDOWS, panic_close
 import game
 from terminal_input import END, ESCAPE
 

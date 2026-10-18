@@ -7,8 +7,8 @@ import socket
 import sys
 import time
 
-from fight import FRAME_TIME, SPELL, SPEED, JsonPeer, draw_scene, terminal_size, wizard_left
-from fight_effects import DEATH_DURATION, render_death
+from .controller import FRAME_TIME, SPELL, SPEED, JsonPeer, draw_scene, terminal_size, wizard_left
+from .effects import DEATH_DURATION, render_death
 
 
 class WizardReaction:

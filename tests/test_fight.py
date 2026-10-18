@@ -5,6 +5,7 @@ import fcntl
 import io
 import os
 import pty
+import shlex
 import socket
 import struct
 import subprocess
@@ -15,8 +16,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import fight
-import fight_windows
+from fight import controller as fight
+from fight import windows as fight_windows
 import game
 from levels import Level11
 
@@ -205,7 +206,7 @@ class FightTests(unittest.TestCase):
         env.pop('COLUMNS', None)
         env.pop('LINES', None)
         process = subprocess.Popen(
-            [sys.executable, '-B', 'wizard.py', '--port', str(self.session.port), '--token', self.session.token],
+            [sys.executable, '-B', '-m', 'fight.wizard', '--port', str(self.session.port), '--token', self.session.token],
             cwd=Path(__file__).resolve().parents[1], stdin=slave, stdout=slave, stderr=slave,
             env=env, start_new_session=True,
         )
@@ -388,7 +389,10 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(command[0], 'osascript')
         self.assertIn('tell application "Terminal"', command[2])
         self.assertIn('set gameTab to do script', command[2])
-        self.assertTrue(command[3].startswith("exec '/Python Path/python3'"))
+        self.assertEqual(shlex.split(command[3])[:7],
+                         ['cd', str(fight_windows.PROJECT), '&&', 'exec',
+                          '/Python Path/python3', '-B', '-m'])
+        self.assertEqual(shlex.split(command[3])[7], 'fight.wizard')
 
     def test_x11_tiling_leaves_fullscreen_and_accounts_for_decorations(self):
         calls = []
@@ -438,8 +442,9 @@ class IntegrationTests(unittest.TestCase):
 
     def test_all_python_syntax(self):
         root = Path(__file__).resolve().parents[1]
-        for path in [*root.glob('*.py'), *root.glob('levels/*.py')]:
-            ast.parse(path.read_text(), filename=str(path))
+        for folder in (root, root / 'levels', root / 'fight', root / 'ending'):
+            for path in folder.glob('*.py'):
+                ast.parse(path.read_text(), filename=str(path))
 
 
 if __name__ == '__main__':

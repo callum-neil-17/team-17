@@ -3,7 +3,7 @@
 import re
 import unittest
 
-from fight_effects import (DEATH_DURATION, ERRORS, FATAL_ERROR, PLAYER_HAND_ROW,
+from fight.effects import (DEATH_DURATION, ERRORS, FATAL_ERROR, PLAYER_HAND_ROW,
                            PLAYER_POSES, render_death, render_terminal_collapse)
 
 
@@ -19,7 +19,7 @@ def collapse_lines(screen):
 
 class EffectsTests(unittest.TestCase):
     def test_impact_keeps_live_wizard_anchor(self):
-        from fight import draw_scene
+        from fight.controller import draw_scene
 
         for size, lane in (((104, 53), 24), ((60, 30), 13), ((50, 28), 12)):
             with self.subTest(size=size):
@@ -49,6 +49,7 @@ class EffectsTests(unittest.TestCase):
         self.assertEqual(frames, [render_death((80, 30), elapsed, color=False) for elapsed in times])
         final_text = "\n".join(line for _, line in frame_lines(frames[-1]))
         self.assertIn(FATAL_ERROR, final_text)
+        self.assertIn("CACHE FLUSH COMPLETE", final_text)
         self.assertIn("PROCESS TERMINATED", final_text)
         self.assertEqual(frames[-1], render_death((80, 30), 100, color=False))
         self.assertGreaterEqual(sum(error in final_text for error in ERRORS), 5)

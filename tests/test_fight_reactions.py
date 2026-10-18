@@ -16,8 +16,8 @@ import time
 import unittest
 from unittest.mock import patch
 
-import fight
-import wizard
+from fight import controller as fight
+from fight import wizard
 from levels import Level10, Level11
 
 
@@ -304,7 +304,7 @@ class WizardReactionPtyTests(unittest.TestCase):
             master, slave = pty.openpty()
             fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 32, 60, 0, 0))
             process = subprocess.Popen(
-                [sys.executable, "-B", str(project / "wizard.py"), "--port", str(session.port),
+                [sys.executable, "-B", "-m", "fight.wizard", "--port", str(session.port),
                  "--token", session.token], stdin=slave, stdout=slave, stderr=slave,
                 cwd=project, start_new_session=True,
             )

@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 
-PROJECT = Path(__file__).resolve().parent
+PROJECT = Path(__file__).resolve().parents[1]
 MANUAL_LAYOUT = "Exit fullscreen; tile Player left and Wizard right."
 
 
@@ -25,7 +25,7 @@ def window_title(role: str, token: str) -> str:
 
 
 def wizard_command(port: int, token: str) -> list[str]:
-    return [sys.executable, "-B", str(PROJECT / "wizard.py"), "--port", str(port), "--token", token]
+    return [sys.executable, "-B", "-m", "fight.wizard", "--port", str(port), "--token", token]
 
 
 def launch_command(port: int, token: str) -> tuple[list[str], dict[str, str]]:
@@ -54,7 +54,8 @@ on run argv
     end tell
 end run
 '''
-        return ["osascript", "-e", script, "exec " + shlex.join(command), title], env
+        shell_command = f"cd {shlex.quote(str(PROJECT))} && exec {shlex.join(command)}"
+        return ["osascript", "-e", script, shell_command, title], env
     if platform.system() == "Linux":
         if shutil.which("gnome-terminal"):
             return ["gnome-terminal", "--window", f"--title={title}",
@@ -325,10 +326,10 @@ def schedule_player_close(token: str) -> bool:
     window_title("player", token)
     try:
         subprocess.Popen(
-            [sys.executable, "-B", str(Path(__file__).resolve()), "--close-player", token,
+            [sys.executable, "-B", "-m", "fight.windows", "--close-player", token,
              "--after-pid", str(os.getpid())],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            start_new_session=True, close_fds=True,
+            start_new_session=True, close_fds=True, cwd=PROJECT,
         )
     except OSError:
         return False

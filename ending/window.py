@@ -10,12 +10,12 @@ import termios
 import time
 import tty
 
-from ending_effects import (CRASH_DURATION, FRAME_RATE, PANIC_DURATION,
+from .effects import (CRASH_DURATION, FRAME_RATE, PANIC_DURATION,
                             render_fake_crash, render_fake_shell, render_panic,
                             shell_context)
-from ending_windows import ending_title
-from ending_config import MAX_PANIC_WINDOWS
-from fight import JsonPeer, terminal_size
+from .windows import ending_title
+from .config import MAX_PANIC_WINDOWS
+from fight.controller import JsonPeer, terminal_size
 from terminal_input import END, KeyReader
 
 
@@ -170,7 +170,7 @@ def run(port: int, token: str, window_id: str, role: str, index: int = 0) -> Non
         # The platform helper closes only this exact token-and-ID title. It also
         # covers terminal profiles which retain a tab after its command exits.
         try:
-            from ending_windows import close_ending_window
+            from .windows import close_ending_window
             close_ending_window(token, window_id, role)
         except (ImportError, OSError, ValueError):
             pass

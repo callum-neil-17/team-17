@@ -9,8 +9,8 @@ import sys
 import time
 from textwrap import dedent, wrap
 
-from fight_windows import MANUAL_LAYOUT, WindowPair
-from fight_effects import PLAYER_HAND_ROW, PLAYER_POSES, PLAYER_WIDTH, render_terminal_collapse
+from .windows import MANUAL_LAYOUT, WindowPair
+from .effects import PLAYER_HAND_ROW, PLAYER_POSES, PLAYER_WIDTH, render_terminal_collapse
 from levels.level1 import WIZARD
 
 

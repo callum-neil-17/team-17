@@ -17,13 +17,13 @@ import time
 import unittest
 from unittest.mock import patch
 
-from ending_effects import (CLUE, CRASH_DURATION, PANIC_MESSAGES, REOPEN_TAUNT,
+from ending.effects import (CLUE, CRASH_DURATION, PANIC_MESSAGES, REOPEN_TAUNT,
                             render_fake_crash, render_fake_shell,
                             render_fallback_panic, render_panic, render_true_end,
                             shell_context)
-from fight import JsonPeer
-from callback_art import BOOK_ART, MUG_ART, RECEIPT_ART
-from ending_config import MAX_PANIC_WINDOWS, panic_close, panic_start
+from fight.controller import JsonPeer
+from ending.callback_art import BOOK_ART, MUG_ART, RECEIPT_ART
+from ending.config import MAX_PANIC_WINDOWS, panic_close, panic_start
 
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -95,9 +95,9 @@ class FinaleEffectsTests(unittest.TestCase):
         self.assertIn(CLUE, reopened)
 
     def test_context_and_printable_echo_cannot_inject_terminal_controls(self):
-        with patch("ending_effects.getpass.getuser", return_value="user\x1b]0;owned\x07"), \
-                patch("ending_effects.socket.gethostname", return_value="host\nname"), \
-                patch("ending_effects.os.getcwd", return_value="/tmp/game\r\n"):
+        with patch("ending.effects.getpass.getuser", return_value="user\x1b]0;owned\x07"), \
+                patch("ending.effects.socket.gethostname", return_value="host\nname"), \
+                patch("ending.effects.os.getcwd", return_value="/tmp/game\r\n"):
             context = shell_context()
         self.assertTrue({"username", "hostname", "cwd", "shell", "prompt"} <= context.keys())
         self.assertTrue(all(32 <= ord(char) <= 126 for value in context.values() for char in value))
@@ -252,7 +252,7 @@ class FinaleChildTests(unittest.TestCase):
         self.output = bytearray()
         self.pending = []
         self.process = subprocess.Popen(
-            [sys.executable, "-B", "ending_window.py", "--port",
+            [sys.executable, "-B", "-m", "ending.window", "--port",
              str(self.listener.getsockname()[1]), "--token", "abc123", "--window-id", "s0",
              "--role", "shell"], cwd=PROJECT, stdin=self.slave,
             stdout=self.slave, stderr=self.slave, start_new_session=True,

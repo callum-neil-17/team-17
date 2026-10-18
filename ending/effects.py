@@ -10,8 +10,8 @@ import os
 import socket
 from textwrap import dedent, wrap
 
-from callback_art import BOOK_ART, MUG_ART, RECEIPT_ART
-from ending_config import (MAX_PANIC_WINDOWS, PANIC_DURATION as TIMELINE_DURATION,
+from .callback_art import BOOK_ART, MUG_ART, RECEIPT_ART
+from .config import (MAX_PANIC_WINDOWS, PANIC_DURATION as TIMELINE_DURATION,
                            panic_close, panic_start)
 from levels.level1 import WIZARD
 

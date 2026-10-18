@@ -17,7 +17,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-import fight
+from fight import controller as fight
 import game
 
 
@@ -178,7 +178,7 @@ class EndingFightTests(unittest.TestCase):
         env.pop("COLUMNS", None)
         env.pop("LINES", None)
         process = subprocess.Popen(
-            [sys.executable, "-B", "wizard.py", "--port", str(self.session.port),
+            [sys.executable, "-B", "-m", "fight.wizard", "--port", str(self.session.port),
              "--token", self.session.token],
             cwd=PROJECT, stdin=slave, stdout=slave, stderr=slave,
             env=env, start_new_session=True,
@@ -213,7 +213,7 @@ class EndingFightTests(unittest.TestCase):
             self.assertLess(death_finished - death_started, 12)
             for message in (b"ERR_SPELL_ROLLBACK", b"ROOT_ACCESS_REVOKED",
                             b"NULL_WAND_REFERENCE", b"STACK_OVERFLOW", b"SEGMENTATION_FAULT",
-                            b"FATAL: wizard.exe has stopped responding"):
+                            b"FATAL: wizard.exe has stopped responding", b"CACHE FLUSH COMPLETE"):
                 self.assertIn(message, output)
             self.assertIn(b"Level 11 - Wizard", output)
             self.assertIn(fight.SPELL[::-1].encode("ascii"), output)

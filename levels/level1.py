@@ -113,7 +113,7 @@ class Level1(Level):
             title="Level 1",
             required_input=("y", "Y", "\n"),
             art=WIZARD,
-            prompt="I have trapped You in the terminal. You cannot esc. You must solve each riddle using at most 2 inputs on your keypad. Press 'Y' to continue ",
+            prompt="I have trapped You in the terminal. You cannot esc. You must solve each riddle using at most 2 inputs on your keypad. Press 'y' to continue ",
             wrong_frames=WRONG_FRAMES,
         )
         self.layout = "level2"

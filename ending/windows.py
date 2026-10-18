@@ -22,11 +22,11 @@ import threading
 import time
 from pathlib import Path
 
-import fight_windows
-from ending_config import MAX_PANIC_WINDOWS
+from fight import windows as fight_windows
+from .config import MAX_PANIC_WINDOWS
 
 
-PROJECT = Path(__file__).resolve().parent
+PROJECT = Path(__file__).resolve().parents[1]
 MAX_WINDOWS = MAX_PANIC_WINDOWS
 _ROLES = {"shell": "player", "panic": "wizard"}
 _WINDOW_IDS = {"shell": re.compile(r"s[0-2]\Z"), "panic": re.compile(r"p[0-9]\Z")}
@@ -52,7 +52,7 @@ def ending_command(port: int, token: str, window_id: str, role: str, index: int 
         raise ValueError("Invalid ending controller port")
     if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < MAX_WINDOWS:
         raise ValueError("Invalid ending window index")
-    return [sys.executable, "-B", str(PROJECT / "ending_window.py"),
+    return [sys.executable, "-B", "-m", "ending.window",
             "--port", str(port), "--token", token, "--window-id", window_id,
             "--role", role, "--index", str(index)]
 
@@ -89,7 +89,8 @@ on run argv
     end tell
 end run
 '''
-        return ["osascript", "-e", script, "exec " + shlex.join(command), title], env
+        shell_command = f"cd {shlex.quote(str(PROJECT))} && exec {shlex.join(command)}"
+        return ["osascript", "-e", script, shell_command, title], env
     if platform.system() == "Linux":
         if env.get("XDG_SESSION_TYPE") == "wayland" or not shutil.which("wmctrl"):
             raise OSError("Ending windows need an X11 desktop with wmctrl for exact window cleanup.")
@@ -113,7 +114,7 @@ def close_ending_window(token: str, window_id: str, role: str) -> bool:
     """
     ending_title(token, window_id, role)
     try:
-        subprocess.Popen([sys.executable, "-B", str(Path(__file__).resolve()),
+        subprocess.Popen([sys.executable, "-B", "-m", "ending.windows",
                           "--close", token, window_id, role, "--after-pid", str(os.getpid())],
                          cwd=PROJECT, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True)

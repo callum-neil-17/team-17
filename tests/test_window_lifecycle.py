@@ -3,11 +3,12 @@
 import base64
 import os
 import queue
+import shlex
 import threading
 import unittest
 from unittest.mock import patch
 
-import fight_windows
+from fight import windows as fight_windows
 import launcher
 
 
@@ -107,7 +108,9 @@ class WindowLifecycleTests(unittest.TestCase):
             command, _ = fight_windows.launch_command(12345, 'private')
         self.assertIn('set gameTab to do script (item 1 of argv)', command[2])
         self.assertIn('set custom title of gameTab to (item 2 of argv)', command[2])
-        self.assertTrue(command[3].startswith("exec '/Python Path/python3'"))
+        self.assertEqual(shlex.split(command[3])[:8],
+                         ['cd', str(fight_windows.PROJECT), '&&', 'exec',
+                          '/Python Path/python3', '-B', '-m', 'fight.wizard'])
         self.assertEqual(command[4], 'Two Keys Wizard private')
 
     def test_finish_runs_after_pair_closed_and_reports_manual_fallback(self):
@@ -166,7 +169,9 @@ class WindowLifecycleTests(unittest.TestCase):
              patch.object(fight_windows.os, 'getpid', return_value=12345):
             self.assertTrue(fight_windows.schedule_player_close('private'))
         command = popen.call_args.args[0]
+        self.assertEqual(command[:4], [fight_windows.sys.executable, '-B', '-m', 'fight.windows'])
         self.assertEqual(command[-4:], ['--close-player', 'private', '--after-pid', '12345'])
+        self.assertEqual(popen.call_args.kwargs['cwd'], fight_windows.PROJECT)
         self.assertTrue(popen.call_args.kwargs['start_new_session'])
         self.assertNotIn('shell', popen.call_args.kwargs)
         with patch.object(fight_windows, '_process_alive', side_effect=[True, False]), \

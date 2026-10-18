@@ -8,9 +8,9 @@ import termios
 import time
 import tty
 
-from fight import FRAME_TIME, PlayerFight
-from ending import run_finale
-from fight_windows import schedule_player_close, window_title
+from fight.controller import FRAME_TIME, PlayerFight
+from ending.controller import run_finale
+from fight.windows import schedule_player_close, window_title
 from terminal_input import ESCAPE, KeyReader
 from levels import (
     Level,
