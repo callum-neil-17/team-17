@@ -63,6 +63,21 @@ def _bus_reaction() -> list[str]:
 WRONG_FRAMES = _bus_reaction()
 
 
+def _bus_idle() -> list[str]:
+    """Puff the exhaust back and forth behind the waiting bus."""
+    neutral = BUS_FRAMES[0].strip("\n").splitlines()
+    frames = []
+    for puffs in ((" ==  ", "  == ", " ==  "), ("  == ", " ==  ", "  == ")):
+        canvas = list(neutral)
+        for row, puff in enumerate(puffs, 1):
+            canvas[row] = puff + canvas[row][len(puff):]
+        frames.append("\n".join(canvas))
+    return frames
+
+
+IDLE_FRAMES = _bus_idle()
+
+
 class Level8(Level):
     def __init__(self) -> None:
         super().__init__(
@@ -79,4 +94,6 @@ class Level8(Level):
             wrong_frames=WRONG_FRAMES,
         )
         self.frame_delay = 1.0
+        self.idle_frames = IDLE_FRAMES
+        self.idle_frame_delay = 0.3
         self.layout = "level9"

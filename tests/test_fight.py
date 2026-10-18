@@ -284,7 +284,8 @@ class IntegrationTests(unittest.TestCase):
         self.assertIn('Level 2', render.call_args.args[0])
         self.assertEqual(read.call_count, 6)
         self.assertTrue(all(0 < call.kwargs['timeout'] <= 0.400001 for call in read.call_args_list[:-1]))
-        self.assertIsNone(read.call_args.kwargs['timeout'])
+        # Level 2 keeps animating its own idle loop while it waits.
+        self.assertAlmostEqual(read.call_args.kwargs['timeout'], game.Level2().idle_frame_delay)
         restore.assert_called_once()
 
     def test_earlier_progression_enters_fight_after_tree(self):

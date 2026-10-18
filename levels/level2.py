@@ -87,6 +87,16 @@ WRONG_FRAMES = [
 ]
 
 
+def _door_idle() -> list[str]:
+    """Run a pulse along the Enter key's arrow while the door stays shut."""
+    neutral = DOOR_FRAMES[0].strip("\n")
+    arrows = ("<----'", "<---='", "<--=-'", "<-=--'", "<=---'", "<----'", "<----'")
+    return [neutral.replace("<----'", arrow) for arrow in arrows]
+
+
+IDLE_FRAMES = _door_idle()
+
+
 class Level2(Level):
     def __init__(self) -> None:
         super().__init__(
@@ -98,3 +108,5 @@ class Level2(Level):
             wrong_frames=WRONG_FRAMES,
         )
         self.layout = "level2"
+        self.idle_frames = IDLE_FRAMES
+        self.idle_frame_delay = 0.15

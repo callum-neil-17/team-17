@@ -99,6 +99,30 @@ def _book_reaction() -> list[str]:
 
 WRONG_FRAMES = _book_reaction()
 
+# Fixed tabletop positions with staggered phases, outside the book itself.
+SPARKLES = (
+    (14, 1, 0), (30, 1, 3), (46, 1, 5), (12, 3, 2), (10, 5, 4),
+    (52, 2, 1), (50, 5, 6), (24, 7, 2), (40, 8, 0), (8, 8, 5),
+)
+
+
+def _book_idle() -> list[str]:
+    """Twinkle a few sparkles so the book looks worth opening."""
+    rows = BOOK_FRAMES[0].strip("\n").splitlines()
+    width = max(map(len, rows))
+    phases = " .+*+. "
+    frames = []
+    for step in range(len(phases)):
+        canvas = [list(row.ljust(width)) for row in rows]
+        for column, row, offset in SPARKLES:
+            if rows[row][column:column + 1] == " ":
+                canvas[row][column] = phases[(step + offset) % len(phases)]
+        frames.append("\n".join("".join(row) for row in canvas))
+    return frames
+
+
+IDLE_FRAMES = _book_idle()
+
 
 class Level7(Level):
     def __init__(self) -> None:
@@ -115,3 +139,5 @@ class Level7(Level):
             prompt="How can you find the wizards address",
             wrong_frames=WRONG_FRAMES,
         )
+        self.idle_frames = IDLE_FRAMES
+        self.idle_frame_delay = 0.25

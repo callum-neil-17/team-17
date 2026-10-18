@@ -96,6 +96,23 @@ WRONG_FRAMES = [
 ] + ["\n".join(row.ljust(68) for row in PAYMENT_FRAMES[0].splitlines())]
 
 
+def _payment_idle() -> list[str]:
+    """Blink the open tab's checkbox while both characters wait."""
+    neutral = "\n".join(row.ljust(68) for row in PAYMENT_FRAMES[0].splitlines())
+    frames = []
+    for step in range(12):
+        frame = neutral.replace("OPEN [ ]", "OPEN [_]") if step % 2 else neutral
+        if step == 4:
+            frame = frame.replace("|o  o|", "|-  -|")
+        elif step == 9:
+            frame = frame.replace("|o o|", "|- -|")
+        frames.append(frame)
+    return frames
+
+
+IDLE_FRAMES = _payment_idle()
+
+
 class Level6(Level):
     def __init__(self) -> None:
         super().__init__(
@@ -112,3 +129,5 @@ class Level6(Level):
         )
         self.frame_delay = 0.25
         self.frame_delays[len(self.frames) - 1] = 1.2
+        self.idle_frames = IDLE_FRAMES
+        self.idle_frame_delay = 0.3

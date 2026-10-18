@@ -99,6 +99,12 @@ WRONG_FRAMES = [
     _atm_reaction_frame(False),
 ]
 
+# A blinking cursor waits after the lowercase character on the ATM screen.
+IDLE_FRAMES = [
+    ATM_FRAMES[0],
+    ATM_FRAMES[0].replace("         c          ", "         c_         "),
+]
+
 
 class Level5(Level):
     def __init__(self) -> None:
@@ -115,3 +121,5 @@ class Level5(Level):
             wrong_frames=WRONG_FRAMES,
         )
         self.frame_delay = 1
+        self.idle_frames = IDLE_FRAMES
+        self.idle_frame_delay = 0.5

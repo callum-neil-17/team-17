@@ -109,6 +109,24 @@ class ReactionTests(unittest.TestCase):
                 level.clear_reaction()
                 self.assertEqual(level.render(), before)
 
+    def test_waiting_scenes_loop_without_touching_the_solve_animation(self):
+        for cls in (Level2, Level3, Level4, Level5, Level6, Level7, Level8, Level9):
+            with self.subTest(level=cls.__name__):
+                level = cls()
+                self.assertIsNotNone(level.idle_frame_delay)
+                normal = level.art(0).splitlines()
+                shape = len(normal), max(map(len, normal))
+                pictures = []
+                for index in range(len(level.idle_frames) + 1):
+                    level.idle_frame = index
+                    rows = level.art(0).splitlines()
+                    self.assertEqual((len(rows), max(map(len, rows))), shape)
+                    pictures.append(level.art(0))
+                self.assertGreaterEqual(len(set(pictures)), 2)
+                # The loop wraps, and later frames still play the solve sequence.
+                self.assertEqual(pictures[-1], pictures[0])
+                self.assertEqual(level.art(1), level.frames[1].strip("\n"))
+
     def test_door_reaction_keeps_title_art_and_clue_at_their_original_rows(self):
         level = Level2()
         screens = [level.render()]

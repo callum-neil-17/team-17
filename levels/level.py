@@ -34,11 +34,15 @@ class Level:
         # Opt in to background animation while waiting for puzzle input.
         self.idle_frame = 0
         self.idle_frame_delay: float | None = None
+        # Optional scenes that loop in place of the first frame until solved.
+        self.idle_frames: list[str] = []
         self.layout = "center"
 
     def art(self, frame: int) -> str:
         if self.reaction_frame is not None:
             return self.wrong_frames[self.reaction_frame].strip("\n")
+        if frame == 0 and self.idle_frames:
+            return self.idle_frames[self.idle_frame % len(self.idle_frames)].strip("\n")
         # Cycle through the frames so any frame number is valid.
         return self.frames[frame % len(self.frames)].strip("\n")
 

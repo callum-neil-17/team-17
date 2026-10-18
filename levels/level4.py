@@ -66,6 +66,23 @@ WRONG_FRAMES = [
     _drink_reaction_frame(None),
 ]
 
+
+def _drink_idle() -> list[str]:
+    """Send small bubbles up through the full pint."""
+    rows = DRINK_FRAMES[0].strip("\n").splitlines()
+    width = max(map(len, rows))
+    frames = []
+    for step in range(5):
+        canvas = [list(row.ljust(width)) for row in rows]
+        # Two staggered bubbles climb from the bottom row to the top of the drink.
+        canvas[6 - step][3] = "."
+        canvas[6 - (step + 2) % 5][7] = "o"
+        frames.append("\n".join("".join(row) for row in canvas))
+    return frames
+
+
+IDLE_FRAMES = _drink_idle()
+
 # F5 arrives as an escape sequence, one character at a time. Most terminals
 # send the first form; the Linux console sends the second.
 F5_SEQUENCES = ("\x1b[15~", "\x1b[[E")
@@ -88,6 +105,8 @@ class Level4(Level):
             wrong_frames=WRONG_FRAMES,
         )
         self.recent_keys = ""
+        self.idle_frames = IDLE_FRAMES
+        self.idle_frame_delay = 0.3
 
     def check_input(self, key: str) -> bool:
         # Keep only enough characters to hold the longest F5 sequence.

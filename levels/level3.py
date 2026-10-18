@@ -314,6 +314,18 @@ WRONG_FRAMES = [
 ] + ["\n".join(row.ljust(68) for row in BAR_FRAMES[0].strip("\n").splitlines())]
 
 
+def _bar_idle() -> list[str]:
+    """Let the bartender blink and the sign flicker while you decide."""
+    neutral = BAR_FRAMES[0].strip("\n")
+    blink = neutral.replace("|o  o|", "|-  -|")
+    flicker = neutral.replace("THE BAR", "TH  BAR")
+    return ([neutral] * 6 + [blink] + [neutral] * 4 + [flicker, neutral, flicker]
+            + [neutral] * 3 + [blink, neutral, blink])
+
+
+IDLE_FRAMES = _bar_idle()
+
+
 class Level3(Level):
     def __init__(self) -> None:
         super().__init__(
@@ -335,6 +347,8 @@ class Level3(Level):
         self.solved = False
         self.frame_delay = 0.2
         self.frame_delays[len(self.frames) - 1] = 0.6
+        self.idle_frames = IDLE_FRAMES
+        self.idle_frame_delay = 0.25
 
     def check_input(self, key: str) -> bool:
         if not super().check_input(key):

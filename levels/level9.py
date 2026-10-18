@@ -193,6 +193,25 @@ def _tree_reaction() -> list[str]:
 WRONG_FRAMES = _tree_reaction()
 
 
+def _tree_idle() -> list[str]:
+    """Rock the treetop a single column, gentler than the reaction's sway."""
+    neutral = FALLING_TREE_ART[0].strip("\n").splitlines()
+    width = max(map(len, neutral))
+    frames = []
+    for shift in (0, 1, 1, 0, -1, -1):
+        canvas = [list(row.ljust(width)) for row in neutral]
+        for row in range(7):
+            canvas[row] = list(" " * width)
+            for column, char in enumerate(neutral[row]):
+                if char != " " and 0 <= column + shift < width:
+                    canvas[row][column + shift] = char
+        frames.append("\n".join("".join(row) for row in canvas))
+    return frames
+
+
+IDLE_FRAMES = _tree_idle()
+
+
 class Level9(Level):
     def __init__(self) -> None:
         super().__init__(
@@ -209,3 +228,5 @@ class Level9(Level):
             wrong_frames=WRONG_FRAMES,
         )
         self.layout = "level10"
+        self.idle_frames = IDLE_FRAMES
+        self.idle_frame_delay = 0.4
