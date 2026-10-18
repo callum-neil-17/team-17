@@ -18,7 +18,7 @@ from unittest.mock import patch
 
 import fight
 import wizard
-from levels import Level11
+from levels import Level10, Level11
 
 
 def lines(screen):
@@ -160,6 +160,39 @@ class FightReactionTests(unittest.TestCase):
                 self.assertIsNone(self.session.level.reaction_frame)
                 self.assertEqual(self.session.state, "awaiting_dodge")
                 self.assertFalse(self.peer.messages)
+                self.assertEqual(self.session.level.wrong_guesses, 0)
+
+    def test_fifth_wrong_guess_shows_backspace_hint_without_restarting_the_spell(self):
+        self.wait_for_solution()
+        hint = "backspace maybe ?"
+        for _ in range(4):
+            self.session.handle_key("x")
+            self.assertNotIn(hint, self.session.render())
+        deadline = self.session.level.reaction_deadline
+        self.session.handle_key("x")
+        self.assertIn(hint, self.session.render())
+        self.assertEqual(self.session.level.wrong_guesses, 5)
+        self.assertEqual(self.session.level.reaction_deadline, deadline)
+        self.assertEqual(self.session.state, "awaiting_dodge")
+        self.assertEqual(self.session.player_x, fight.STOP_X)
+        self.assertEqual(self.peer.messages, [{"type": "wrong_guess", "number": 10}])
+        for _ in range(5):
+            self.session.handle_key("x")
+        self.assertEqual(self.session.level.prompt.count(hint), 1)
+
+    def test_both_backspaces_still_dodge_and_hint_does_not_carry_to_level11(self):
+        for key in ("\x7f", "\x08"):
+            with self.subTest(key=repr(key)):
+                self.session.level = Level10()
+                self.wait_for_solution()
+                for _ in range(5):
+                    self.session.handle_key("x")
+                self.session.handle_key(key)
+                self.assertEqual(self.session.state, "dodging")
+                self.assertEqual(self.peer.messages[-1], {"type": "dodge", "id": 1})
+                self.session.begin_level(Level11())
+                self.assertEqual(self.session.state, "awaiting_undo")
+                self.assertNotIn("backspace maybe ?", self.session.render())
 
     def test_new_level_clears_previous_reaction(self):
         self.wait_for_solution()
@@ -170,6 +203,39 @@ class FightReactionTests(unittest.TestCase):
         self.session.begin_level(next_level)
         self.assertEqual(self.session.state, "awaiting_undo")
         self.assertIsNone(self.session.level.reaction_frame)
+
+    def test_level11_fifth_wrong_guess_shows_undo_hint_and_one_ctrl_z_still_reverses(self):
+        self.wait_for_solution(11)
+        hint = "Whats the command for undo ?"
+        for _ in range(4):
+            self.session.handle_key("x")
+            self.assertNotIn(hint, self.session.render())
+        deadline = self.session.level.reaction_deadline
+        self.session.handle_key("x")
+        self.assertIn(hint, self.session.render())
+        self.assertEqual(self.session.level.wrong_guesses, 5)
+        self.assertEqual(self.session.level.reaction_deadline, deadline)
+        self.assertEqual(self.session.state, "awaiting_undo")
+        for _ in range(5):
+            self.session.handle_key("x")
+        self.assertEqual(self.session.level.prompt.count(hint), 1)
+
+        self.session.handle_key("\x1a")
+        self.assertEqual(self.session.state, "return_player")
+        self.assertTrue(self.session.undo_requested)
+        messages = list(self.peer.messages)
+        self.session.handle_key("\x1a")
+        self.assertEqual(self.peer.messages, messages)
+
+    def test_level11_ignored_controls_and_correct_undo_do_not_count(self):
+        self.wait_for_solution(11)
+        for key in (None, "", "q", "\x03", "\x04", "\x1c", "\x13", "\x11", "\x1b"):
+            self.session.handle_key(key)
+        self.assertEqual(self.session.level.wrong_guesses, 0)
+        self.assertNotIn("Whats the command for undo ?", self.session.render())
+        self.session.handle_key("\x1a")
+        self.assertEqual(self.session.level.wrong_guesses, 0)
+        self.assertEqual(self.session.state, "return_player")
 
 
 class WizardReactionTests(unittest.TestCase):

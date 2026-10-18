@@ -110,3 +110,13 @@ class Level2(Level):
         self.layout = "level2"
         self.idle_frames = IDLE_FRAMES
         self.idle_frame_delay = 0.15
+        self.wrong_guesses = 0
+
+    def react_to_wrong_input(self, key: str | None, now: float | None = None) -> bool:
+        ignored = (None, "", "q", "\x03", "\x04", "\x1a", "\x1c", "\x13", "\x11", "\x1b")
+        if self.wrong_guesses < 5 and key not in ignored and key not in self.required_input:
+            self.wrong_guesses += 1
+            if self.wrong_guesses == 5:
+                self.prompt = self.prompt.rstrip() + "\nENTER!!! the room"
+        # Each wrong guess counts even while the existing art reaction plays.
+        return super().react_to_wrong_input(key, now=now)
