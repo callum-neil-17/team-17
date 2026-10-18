@@ -28,13 +28,14 @@ and the final twist.
 During gameplay, `q` and ordinary terminal quit/suspend shortcuts stay ignored.
 Control keys can be puzzle input: Ctrl+Z solves Level 11 without suspending the
 process. The epilogue waits for Escape; Escape begins the false exit below.
-During the new finale, Ctrl+C is always an emergency exit, including during
-animations. Level 12 remains available as a template file, but the finished
+Ctrl+C stays ignored during the finale, including its animations. The false
+shell waits for End and the final animation finishes automatically. Level 12
+remains available as a template file, but the finished
 wizard fight leads directly to the epilogue and finale.
 
 Wrong guesses in Levels 1-11 trigger brief animations in the ASCII drawings:
 the door rattles, the bartender reacts, the ATM flickers, and other objects
-move within their scenes. These add no dialogue and do not advance the puzzle.
+move within their scenes. These reactions add no dialogue and do not advance the puzzle.
 Repeated keys cannot restart an animation while it is playing; correct answers
 interrupt it immediately and play the usual success sequence. During the
 fight, both the player and the wizard react locally to one socket event.
@@ -159,13 +160,15 @@ wizard types: "You managed to escape my curse, but you will never put an end
 to me." This prompt never executes commands. Press the **End key** to solve it;
 typing the letters `end` does nothing. Closing this fake terminal reopens the
 same puzzle at most twice, with "Closing a window won't end me." Closing the
-third instance exits. Ctrl+C in the original or any finale terminal cancels
-everything and prevents further reopening.
+third instance exits. Ctrl+C in the original or any finale terminal is ignored
+without pausing the animation. Closing the original game window still stops
+the game and cleans up its children.
 
 End immediately disables reopening. The cursor freezes, the clue fragments,
 and fictional tracebacks build over 2.5 seconds. The fake shell closes and up
-to six real wizard terminals appear in a staggered burst. Each uses the existing
-wizard drawing before it shakes, loses rows and collapses. Their panic lasts
+to ten real wizard terminals appear in a staggered burst. Each uses the existing
+wizard drawing before torn rows, offset ghost outlines, binary fragments and
+error trails break it apart. Their panic lasts
 about eight seconds overall; copies close in sequence. Once cleanup completes,
 the original terminal comes forward where supported, stays blank for 0.75
 seconds, then shows `THE END` for two seconds. Direct execution returns to the
@@ -186,7 +189,7 @@ python3.12 game.py --finale --inline-ending
 ```
 
 The fallback keeps the same End solution, fake crash, eight-second panic and
-true ending, drawing six overlapping fake terminal panels. It is selected
+true ending, drawing ten overlapping fake terminal panels. It is selected
 automatically if a window cannot launch or its connection/closure cannot be
 established reliably. On Linux, the extra ending windows require an X11
 session, GNOME Terminal or xterm, and `wmctrl`; Wayland and desktops without
@@ -269,14 +272,16 @@ spell handoff, both Backspace encodings, one-action Ctrl+Z reversal and the full
 wizard death, epilogue controls, safe owned-window closure, resizing,
 disconnects, earlier-level progression and raw-mode cleanup after exceptions.
 Finale checks cover split End/Escape decoding, inert shell input, the two-reopen
-limit, six-window cap, failed launches, socket timeouts, cancellation races,
-child/process ownership and complete inline progression.
+limit, ten-window cap, failed launches, socket timeouts, ignored Ctrl+C,
+disconnected-parent cleanup, child/process ownership and complete inline
+progression. `ending_config.py` shares the window limit and timing between
+the controller, desktop manager and inline effects.
 Linux Mint/Cinnamon X11 has also been checked with real terminal windows,
 including wizard defeat, focus return, owned player-window closure, both
-permitted fake-shell reopenings, six simultaneous panic copies and cleanup
-after completion or cancellation. Real PTY checks cover the full inline ending,
-inert typed `end`, a split End sequence, the quiet final pause, prompt Ctrl+C
-and exact terminal-settings restoration.
+permitted fake-shell reopenings, ten simultaneous panic copies and cleanup after
+completion or parent-window closure. Real PTY checks cover the full inline
+ending, inert typed `end`, a split End sequence, the quiet final pause,
+ignored Ctrl+C with continued playback, and exact terminal-settings restoration.
 macOS and Windows/WSL desktop automation require testing on those operating systems;
 their launch and ownership command construction is covered by tests.
 

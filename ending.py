@@ -7,6 +7,7 @@ can reopen its shell (twice), start the bounded panic, or shut everything down.
 from dataclasses import dataclass
 import hmac
 import secrets
+import signal
 import socket
 import sys
 import time
@@ -17,14 +18,12 @@ from ending_effects import (
     render_fallback_panic, render_true_end, shell_context,
 )
 from ending_windows import EndingWindows
+from ending_config import MAX_PANIC_WINDOWS, PANIC_DURATION, PANIC_STAGGER, panic_close
 from fight import JsonPeer, terminal_size
 from terminal_input import END, KeyReader
 
 
 MAX_REOPENINGS = 2
-MAX_PANIC_WINDOWS = 6
-PANIC_DURATION = 8.0
-PANIC_STAGGER = 0.3
 HELLO_TIMEOUT = 3.5
 HEARTBEAT_TIMEOUT = 5.0
 FRAME_TIME = 1 / 30
@@ -167,8 +166,10 @@ class FinaleController:
         self.windows.focus_player(self.player_token)
 
     def handle_key(self, key: str | None) -> None:
-        if key in ("\x03", "CTRL_C", ""):
+        if key == "":
             self.abort()
+            return
+        if key in ("\x03", "CTRL_C"):
             return
         if key == END and self.phase == "shell" and not self.solved:
             self.solved = True
@@ -228,7 +229,7 @@ class FinaleController:
         if message.get("type") == "input":
             key = message.get("key")
             if key == "CTRL_C":
-                self.abort()
+                self.handle_key(key)
             elif key == END and child.role == "shell" and child.window_id == self.shell_id:
                 self.handle_key(END)
         elif message.get("type") == "finished" and child.role == "panic":
@@ -349,7 +350,7 @@ class FinaleController:
                 index = self.panic_spawned
                 self.panic_spawned += 1
                 window_id = f"p{index}"
-                close_at = self.phase_started + 5.5 + index * 0.4
+                close_at = self.phase_started + panic_close(index)
                 child = Child(window_id, "panic", now, index=index, close_at=close_at)
                 self.children[window_id] = child
                 if (now >= close_at or not self.windows.launch(
@@ -413,14 +414,20 @@ def run_finale(fd: int, player_token: str, *, inline: bool = False,
     reader = KeyReader(fd) if read_input is None else None
     previous = None
     previous_view = None
+    previous_sigint = None
     try:
+        try:
+            previous_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        except ValueError:
+            # Tests may run the display loop outside Python's main thread.
+            pass
         controller.start()
         while not controller.finished:
             key = (reader.read(FRAME_TIME) if reader is not None
                    else read_input(fd, timeout=FRAME_TIME))
-            # Read emergency input before EOF can schedule a replacement shell.
-            # Other keys wait until tick has authenticated any new child hello.
-            if key in ("\x03", "CTRL_C", ""):
+            # A disconnected original terminal stops every owned child before
+            # a simultaneous fake-shell EOF can schedule a replacement.
+            if key == "":
                 controller.handle_key(key)
                 break
             controller.tick()
@@ -440,4 +447,8 @@ def run_finale(fd: int, player_token: str, *, inline: bool = False,
                 previous = output
         return controller.phase == "done"
     finally:
-        controller.close()
+        try:
+            controller.close()
+        finally:
+            if previous_sigint is not None:
+                signal.signal(signal.SIGINT, previous_sigint)

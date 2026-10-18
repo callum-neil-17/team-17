@@ -23,12 +23,13 @@ import time
 from pathlib import Path
 
 import fight_windows
+from ending_config import MAX_PANIC_WINDOWS
 
 
 PROJECT = Path(__file__).resolve().parent
-MAX_WINDOWS = 6
+MAX_WINDOWS = MAX_PANIC_WINDOWS
 _ROLES = {"shell": "player", "panic": "wizard"}
-_WINDOW_IDS = {"shell": re.compile(r"s[0-2]\Z"), "panic": re.compile(r"p[0-5]\Z")}
+_WINDOW_IDS = {"shell": re.compile(r"s[0-2]\Z"), "panic": re.compile(r"p[0-9]\Z")}
 _LAUNCH_GRACE = 0.12
 _CLOSE_JOIN_SECONDS = 5.0
 _CLEANUP_DELAYS = (0.0, 0.15)
@@ -227,7 +228,7 @@ class _Window:
 
 
 class EndingWindows:
-    """Keep desktop work away from gameplay and limit outstanding windows to six.
+    """Keep desktop work away from gameplay and bound outstanding windows.
 
     ``launched`` means that the desktop accepted a launch request.  It is not a
     child hello or proof that a terminal is still open.  ``register_pid`` must
@@ -376,8 +377,10 @@ class EndingWindows:
             left, top, available_width, available_height = map(int, area.groups())
             width = min(700, available_width, max(300, available_width * 2 // 3))
             height = min(420, available_height, max(180, available_height * 2 // 3))
-            x = left + (available_width - width) * (window.index % 3) // 2
-            y = top + (available_height - height) * (window.index // 3)
+            columns = 3
+            rows = (MAX_WINDOWS + columns - 1) // columns
+            x = left + (available_width - width) * (window.index % columns) // (columns - 1)
+            y = top + (available_height - height) * (window.index // columns) // max(1, rows - 1)
             if not window.cancelled.is_set():
                 fight_windows._run(["wmctrl", "-ir", identifier, "-e", f"0,{x},{y},{width},{height}"],
                                     _DESKTOP_TIMEOUT)
@@ -466,7 +469,7 @@ class EndingWindows:
             self._stop_launcher(window)
             with self._lock:
                 # If desktop automation failed, conservatively reserve its
-                # slot: an unconfirmed old window must not permit a seventh.
+                # slot: an unconfirmed old window must not exceed the cap.
                 window.active = not confirmed
                 self._release_pidfd(window)
                 if not window.closed_reported:
@@ -491,7 +494,7 @@ class EndingWindows:
     def close(self) -> None:
         """Cancel launches, retire owned processes, and drain bounded desktop work.
 
-        Up to six cleanups run in parallel. Desktop commands have individual
+        Cleanups run in parallel. Desktop commands have individual
         timeouts and are killed/reaped by subprocess.run on expiry. A terminal
         dispatch still returning from Popen rechecks cancellation before it can
         publish a successful launch, and immediately retires that owned process.

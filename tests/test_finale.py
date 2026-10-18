@@ -3,10 +3,12 @@
 import contextlib
 import io
 import queue
+import signal
 import unittest
 from unittest.mock import patch
 
 import ending
+from ending_config import MAX_PANIC_WINDOWS, panic_close
 import game
 from terminal_input import END, ESCAPE
 
@@ -127,10 +129,12 @@ class FinaleTests(unittest.TestCase):
         self.assertEqual([item[0] for item in self.windows.launched], ["s0", "s1", "s2"])
         self.assertEqual(self.controller.phase, "aborted")
 
-    def test_emergency_exit_wins_over_close_and_never_reopens(self):
+    def test_eof_wins_over_close_and_never_reopens(self):
         peer = self.connect()
+        pending = Peer()
+        self.controller.pending.append((pending, self.clock[0]))
         peer.eof = True
-        self.controller.handle_key("\x03")
+        self.controller.handle_key("")
         self.advance(1)
         self.controller.close()
         self.controller.close()
@@ -138,18 +142,121 @@ class FinaleTests(unittest.TestCase):
         self.assertEqual(len(self.windows.launched), 1)
         self.assertEqual(self.windows.closed, 1)
         self.assertTrue(peer.closed)
+        self.assertTrue(pending.closed)
+        self.assertIsNone(self.controller.listener)
+        self.assertFalse(self.windows.active)
 
-    def test_queued_ctrl_c_is_read_before_socket_eof_in_real_loop(self):
+    def test_queued_eof_is_read_before_socket_eof_in_real_loop(self):
         peer = self.connect()
         peer.eof = True
         with patch.object(ending, "FinaleController", return_value=self.controller), \
              contextlib.redirect_stdout(io.StringIO()):
-            completed = ending.run_finale(123, "original-player", read_input=lambda *a, **k: "\x03")
+            completed = ending.run_finale(123, "original-player", read_input=lambda *a, **k: "")
         self.assertFalse(completed)
         self.assertEqual([item[0] for item in self.windows.launched], ["s0"])
         self.assertTrue(self.controller.closed)
 
-    def test_real_window_path_has_six_copies_then_returns_to_original(self):
+    def test_ctrl_c_from_player_and_child_does_not_exit_or_block_end(self):
+        peer = self.connect()
+        for key in ("\x03", "CTRL_C", "\x03"):
+            self.controller.handle_key(key)
+            peer.incoming.append({"type": "input", "key": "CTRL_C"})
+            self.advance(0)
+            self.assertEqual(self.controller.phase, "shell")
+            self.assertTrue(self.controller.reopening_enabled)
+            self.assertEqual(self.controller.typed, "")
+        peer.incoming.append({"type": "input", "key": END})
+        self.advance(0)
+        self.assertEqual(self.controller.phase, "crash")
+        for key in ("\x03", "CTRL_C"):
+            self.controller.handle_key(key)
+            peer.incoming.append({"type": "input", "key": "CTRL_C"})
+            self.advance(ending.CRASH_DURATION / 2)
+        self.assertEqual(self.controller.phase, "closing_shell")
+        self.assertTrue(self.controller.solved)
+        self.assertEqual(sum(message.get("scene") == "crash" for message in peer.sent), 1)
+        self.assertEqual(self.controller.reopenings, 0)
+
+    def test_ctrl_c_does_not_disable_normal_window_reopening(self):
+        peer = self.connect()
+        peer.eof = True
+        self.controller.handle_key("\x03")
+        self.advance(0)
+        self.assertEqual(self.controller.phase, "opening_shell")
+        self.assertEqual(self.controller.reopenings, 1)
+        self.assertEqual([item[0] for item in self.windows.launched], ["s0", "s1"])
+
+    def test_ctrl_c_is_ignored_through_complete_inline_sequence(self):
+        self.controller.close()
+        controller = ending.FinaleController("original-player", inline=True, windows=Windows(),
+                                             clock=lambda: self.clock[0])
+        self.addCleanup(controller.close)
+        controller.start()
+        for key in ("\x03", "CTRL_C", "\x03"):
+            controller.handle_key(key)
+        self.assertEqual(controller.phase, "shell")
+        controller.handle_key(END)
+        for phase, duration in (("crash", ending.CRASH_DURATION),
+                                ("panic", ending.PANIC_DURATION),
+                                ("true_end", ending.TRUE_END_DURATION)):
+            self.assertEqual(controller.phase, phase)
+            for key in ("\x03", "CTRL_C", "\x03"):
+                controller.handle_key(key)
+            self.clock[0] += duration
+            controller.tick()
+        self.assertEqual(controller.phase, "done")
+
+    def test_real_loop_ignores_ctrl_c_and_animates_until_eof(self):
+        self.connect()
+        inputs = iter((("\x03", 0), ("CTRL_C", 0), (END, 0),
+                       ("\x03", ending.CRASH_DURATION), ("", 0)))
+        phases = []
+        original_handler = signal.getsignal(signal.SIGINT)
+
+        def read_input(*args, **kwargs):
+            self.assertEqual(signal.getsignal(signal.SIGINT), signal.SIG_IGN)
+            phases.append(self.controller.phase)
+            key, elapsed = next(inputs)
+            self.clock[0] += elapsed
+            return key
+
+        with patch.object(ending, "FinaleController", return_value=self.controller), \
+             contextlib.redirect_stdout(io.StringIO()):
+            completed = ending.run_finale(123, "original-player", read_input=read_input)
+        self.assertFalse(completed)
+        self.assertEqual(phases, ["shell", "shell", "shell", "crash", "closing_shell"])
+        self.assertTrue(self.controller.closed)
+        self.assertEqual(signal.getsignal(signal.SIGINT), original_handler)
+        self.assertEqual(len(self.windows.launched), 1)
+
+    def test_input_failure_restores_sigint_and_closes_children(self):
+        peer = self.connect()
+        original_handler = signal.getsignal(signal.SIGINT)
+
+        def read_input(*args, **kwargs):
+            self.assertEqual(signal.getsignal(signal.SIGINT), signal.SIG_IGN)
+            raise RuntimeError("input failed")
+
+        with patch.object(ending, "FinaleController", return_value=self.controller), \
+             contextlib.redirect_stdout(io.StringIO()), \
+             self.assertRaisesRegex(RuntimeError, "input failed"):
+            ending.run_finale(123, "original-player", read_input=read_input)
+        self.assertEqual(signal.getsignal(signal.SIGINT), original_handler)
+        self.assertTrue(self.controller.closed)
+        self.assertTrue(peer.closed)
+        self.assertEqual(self.windows.closed, 1)
+
+    def test_cleanup_failure_still_restores_sigint(self):
+        self.connect()
+        original_handler = signal.getsignal(signal.SIGINT)
+        with patch.object(ending, "FinaleController", return_value=self.controller), \
+             patch.object(self.controller, "close", side_effect=RuntimeError("cleanup failed")), \
+             contextlib.redirect_stdout(io.StringIO()), \
+             self.assertRaisesRegex(RuntimeError, "cleanup failed"):
+            ending.run_finale(123, "original-player", read_input=lambda *a, **k: "")
+        self.assertEqual(signal.getsignal(signal.SIGINT), original_handler)
+
+    def test_real_window_path_has_ten_copies_then_returns_to_original(self):
         self.connect()
         self.controller.handle_key(END)
         self.advance(ending.CRASH_DURATION)
@@ -157,7 +264,7 @@ class FinaleTests(unittest.TestCase):
         self.advance(0)
         self.assertEqual(self.controller.phase, "panic")
         panic_started = self.controller.phase_started
-        for _ in range(6):
+        for _ in range(MAX_PANIC_WINDOWS):
             for child in list(self.controller.children.values()):
                 if child.role == "panic" and child.peer is None:
                     self.connect(child.window_id)
@@ -165,14 +272,20 @@ class FinaleTests(unittest.TestCase):
         for child in list(self.controller.children.values()):
             if child.role == "panic" and child.peer is None:
                 self.connect(child.window_id)
-        self.assertEqual(self.controller.panic_spawned, 6)
-        self.assertEqual(self.windows.peak, 6)
-        for close_offset in (5.5, 5.9, 6.3, 6.7, 7.1, 7.5, 8.0):
+        self.assertEqual(MAX_PANIC_WINDOWS, 10)
+        self.assertEqual(self.controller.panic_spawned, MAX_PANIC_WINDOWS)
+        self.assertEqual(self.windows.peak, MAX_PANIC_WINDOWS)
+        self.assertEqual([name for name, role, _ in self.windows.launched if role == "panic"],
+                         [f"p{index}" for index in range(MAX_PANIC_WINDOWS)])
+        for index in range(MAX_PANIC_WINDOWS):
+            self.assertAlmostEqual(self.controller.children[f"p{index}"].close_at,
+                                   panic_started + panic_close(index))
+        for close_offset in [panic_close(index) for index in range(MAX_PANIC_WINDOWS)] + [ending.PANIC_DURATION]:
             self.advance(max(0, panic_started + close_offset - self.clock[0]) + 0.001)
             self.advance(0)
         self.assertEqual(self.controller.phase, "true_end")
         self.assertEqual([name for name in self.windows.retired if name.startswith("p")],
-                         [f"p{index}" for index in range(6)])
+                         [f"p{index}" for index in range(MAX_PANIC_WINDOWS)])
         self.assertFalse(self.windows.active)
         self.assertIn("original-player", self.windows.focused)
         self.advance(0.8)
@@ -219,7 +332,7 @@ class FinaleTests(unittest.TestCase):
         self.assertEqual(self.controller.phase, "panic")
         self.assertTrue(self.controller.panic_fallback)
         self.assertIn("manually", self.controller.window_warning)
-        self.assertEqual(self.controller.panic_spawned, 6)
+        self.assertEqual(self.controller.panic_spawned, MAX_PANIC_WINDOWS)
 
     def test_invalid_authentication_never_registers_or_owns_a_pid(self):
         peer = Peer()

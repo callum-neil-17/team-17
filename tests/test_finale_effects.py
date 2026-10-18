@@ -23,6 +23,7 @@ from ending_effects import (CLUE, CRASH_DURATION, PANIC_MESSAGES, REOPEN_TAUNT,
                             shell_context)
 from fight import JsonPeer
 from callback_art import BOOK_ART, MUG_ART, RECEIPT_ART
+from ending_config import MAX_PANIC_WINDOWS, panic_close, panic_start
 
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -134,11 +135,12 @@ class FinaleEffectsTests(unittest.TestCase):
         self.assertIn("<wizard/curse>", text(render_fake_crash((100, 30), 1.7, context=CONTEXT)))
         final = render_fake_crash((100, 30), CRASH_DURATION, context=CONTEXT)
         self.assertIn("FATAL: wizard runtime", text(final))
+        self.assertIn("[recovery fork requested: 10 copies]", text(final))
         self.assertEqual(final, render_fake_crash((100, 30), 100, context=CONTEXT))
 
     def test_panic_variants_start_as_the_wizard_then_delete_and_collapse(self):
         frames = []
-        for index in range(6):
+        for index in range(MAX_PANIC_WINDOWS):
             start = render_panic((100, 30), 0, index=index)
             self.assertIn("_,-'|", text(start))
             frames.append(start)
@@ -147,35 +149,39 @@ class FinaleEffectsTests(unittest.TestCase):
             for message, frame in zip(PANIC_MESSAGES, stage_text):
                 self.assertIn(message, frame)
             self.assertNotIn("_,-'|", stage_text[-1])
-        self.assertEqual(len(set(frames)), 6)
-        fallback = text(render_fallback_panic((100, 35), 1.6))
-        self.assertIn("reference 06", fallback)
+        self.assertEqual(len(set(frames)), MAX_PANIC_WINDOWS)
+        fallback = text(render_fallback_panic((100, 35), 1.8))
+        self.assertIn("reference 10", fallback)
         self.assertIn("+---", fallback)
         self.assertIn(PANIC_MESSAGES[-1], text(render_fallback_panic((100, 35), 8)))
 
-    def test_fallback_staggers_six_panels_then_retires_them_one_by_one(self):
+    def test_fallback_staggers_ten_panels_then_retires_them_one_by_one(self):
         def references(elapsed, duration=8):
             frame = text(render_fallback_panic((200, 70), elapsed, duration))
             return re.findall(r"wizard@local / reference (\d{2})", frame)
 
         self.assertEqual(references(0), ["01"])
-        for elapsed, count in ((0.4, 2), (0.7, 3), (1, 4), (1.3, 5), (1.6, 6)):
+        for count in range(1, MAX_PANIC_WINDOWS + 1):
+            elapsed = panic_start(count - 1) + 0.1
             with self.subTest(elapsed=elapsed):
                 self.assertEqual(references(elapsed), [f"{index:02d}" for index in range(1, count + 1)])
         # Sample after the next 12 Hz frame at each window's close deadline.
-        for retired, elapsed in enumerate((5.6, 6.0, 6.4, 6.8, 7.2, 7.6), start=1):
+        for retired in range(1, MAX_PANIC_WINDOWS + 1):
+            elapsed = panic_close(retired - 1) + 0.1
             with self.subTest(elapsed=elapsed):
-                self.assertEqual(references(elapsed), [f"{index:02d}" for index in range(retired + 1, 7)])
-        for elapsed in (7.6, 8, 100):
+                self.assertEqual(references(elapsed), [f"{index:02d}" for index in
+                                                       range(retired + 1, MAX_PANIC_WINDOWS + 1)])
+        for elapsed in (7.9, 8, 100):
             frame = text(render_fallback_panic((200, 70), elapsed))
             self.assertEqual(frame.strip(), PANIC_MESSAGES[-1])
         self.assertEqual(references(0, duration=4), ["01"])
-        self.assertEqual(references(0.8, duration=4), ["01", "02", "03", "04", "05", "06"])
+        self.assertEqual(references(0.9, duration=4),
+                         [f"{index:02d}" for index in range(1, MAX_PANIC_WINDOWS + 1)])
         self.assertEqual(references(4, duration=4), [])
 
     def test_final_panic_recalls_earlier_scene_objects_then_deletes_them(self):
         memories = (MUG_ART, RECEIPT_ART, BOOK_ART)
-        for index in range(6):
+        for index in range(MAX_PANIC_WINDOWS):
             memory = memories[index % len(memories)]
             with self.subTest(index=index):
                 start = render_panic((100, 30), 0, index=index, duration=6)
@@ -199,6 +205,24 @@ class FinaleEffectsTests(unittest.TestCase):
         self.assertFalse(any(contains_art(deleted, memory)
                              for memory in (MUG_ART, RECEIPT_ART, BOOK_ART)))
         self.assertEqual(text(deleted).strip(), PANIC_MESSAGES[-1])
+
+    def test_glitch_fragments_move_without_covering_the_reference_or_final_plea(self):
+        frames = [render_panic((100, 30), elapsed, index=4, duration=6)
+                  for elapsed in (2.4, 3.6, 5.2)]
+        for frame, message in zip(frames, (PANIC_MESSAGES[1], PANIC_MESSAGES[1],
+                                          PANIC_MESSAGES[2])):
+            with self.subTest(message=message):
+                self.assertIn("wizard@local / reference 05", text(frame).splitlines()[0])
+                self.assertEqual(lines(frame)[-2][2].strip(), message)
+                self.assertRegex(text(frame), r"(?:[01]{3,}#?[01]*|REF_LOST|0x\?{4})")
+                self.assertNotRegex(frame, r"\x1b\[(?:5|7)m")
+        self.assertEqual(len(set(frames)), 3)
+        self.assertTrue(contains_art(frames[1], RECEIPT_ART))
+        # Every copy, including the new tenth copy, retains its identity after
+        # tearing. This catches accidental six-variant wrapping in the viewer.
+        tenth = render_panic((100, 30), 3.6, index=9, duration=6)
+        self.assertIn("wizard@local / reference 10", text(tenth).splitlines()[0])
+        self.assertNotEqual(tenth, frames[1])
 
     def test_animation_is_quantized_and_final_title_has_a_blank_beat(self):
         for renderer in (render_panic, render_fallback_panic):
@@ -288,19 +312,37 @@ class FinaleChildTests(unittest.TestCase):
         self.assertEqual(termios.tcgetattr(self.slave), self.saved_tty)
         self.assertIn(b"\x1b[?25h\x1b[?1049l", self.output)
 
-    def test_end_and_ctrl_c_are_responsive_and_shell_text_is_never_executed(self):
+    def test_ctrl_c_is_inert_end_still_works_and_shell_text_is_never_executed(self):
         self.peer.send({"type": "scene", "scene": "shell", "elapsed": 10, "context": CONTEXT})
         with tempfile.TemporaryDirectory() as directory:
             marker = Path(directory, "executed")
             os.write(self.master, f"printf unsafe > {marker}\r".encode("ascii"))
+            os.write(self.master, b"\x03")
+            self.process.send_signal(signal.SIGINT)
+            self.peer.send({"type": "ping"})
+            self.wait_message("pong")
+            self.assertFalse(any(message["type"] == "input" for message in self.pending))
             os.write(self.master, b"\x1b[4~")
             self.assertEqual(self.wait_message("input")["key"], "END")
             os.write(self.master, b"\x03")
-            self.assertEqual(self.wait_message("input")["key"], "CTRL_C")
+            self.process.send_signal(signal.SIGINT)
             self.peer.send({"type": "ping"})
             self.wait_message("pong")
             self.assertIsNone(self.process.poll())
+            self.assertFalse(any(message["type"] == "input" for message in self.pending))
             self.assertFalse(marker.exists())
+        # Neither raw Ctrl+C nor SIGINT may freeze the ensuing animations.
+        self.peer.send({"type": "scene", "scene": "crash", "elapsed": 2.35,
+                        "context": CONTEXT})
+        os.write(self.master, b"\x03")
+        self.assertEqual(self.wait_message("finished")["scene"], "crash")
+        self.peer.send({"type": "scene", "scene": "panic", "duration": 0.2,
+                        "index": MAX_PANIC_WINDOWS - 1})
+        os.write(self.master, b"\x03")
+        self.process.send_signal(signal.SIGINT)
+        self.assertEqual(self.wait_message("finished")["scene"], "panic")
+        self.assertFalse(any(message["type"] == "input" for message in self.pending))
+        self.assertIn(b"reference 10", self.output)
         self.peer.send({"type": "shutdown"})
         self.assert_restored()
         self.assertIn(CLUE.encode("ascii"), self.output)

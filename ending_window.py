@@ -14,6 +14,7 @@ from ending_effects import (CRASH_DURATION, FRAME_RATE, PANIC_DURATION,
                             render_fake_crash, render_fake_shell, render_panic,
                             shell_context)
 from ending_windows import ending_title
+from ending_config import MAX_PANIC_WINDOWS
 from fight import JsonPeer, terminal_size
 from terminal_input import END, KeyReader
 
@@ -36,7 +37,6 @@ def run(port: int, token: str, window_id: str, role: str, index: int = 0) -> Non
     stdin_fd = None
     entered_screen = False
     stopped = False
-    interrupted = False
     old_handlers = {}
     title = ending_title(token, window_id, role)
 
@@ -44,14 +44,10 @@ def run(port: int, token: str, window_id: str, role: str, index: int = 0) -> Non
         nonlocal stopped
         stopped = True
 
-    def interrupt(signum: int, frame: object) -> None:
-        nonlocal interrupted
-        interrupted = True
-
     try:
         # run() is also usable by tests outside the main thread.
         for signum, handler in ((signal.SIGHUP, stop), (signal.SIGTERM, stop),
-                                (signal.SIGINT, interrupt),
+                                (signal.SIGINT, signal.SIG_IGN),
                                 (signal.SIGQUIT, signal.SIG_IGN),
                                 (signal.SIGTSTP, signal.SIG_IGN)):
             try:
@@ -84,7 +80,6 @@ def run(port: int, token: str, window_id: str, role: str, index: int = 0) -> Non
         clear_pending = True
         finished = False
         end_sent = False
-        cancellation_sent = False
         while not stopped:
             now = time.monotonic()
             for message in peer.poll():
@@ -105,7 +100,7 @@ def run(port: int, token: str, window_id: str, role: str, index: int = 0) -> Non
                                    list(supplied_context.items())[:12]}
                     elapsed_offset = _number(message.get("elapsed"))
                     reopened = int(_number(message.get("reopened"), maximum=1000))
-                    index = int(_number(message.get("index", index), maximum=5))
+                    index = int(_number(message.get("index", index), maximum=MAX_PANIC_WINDOWS - 1))
                     duration = max(0.1, _number(message.get("duration", PANIC_DURATION),
                                                PANIC_DURATION, maximum=8.0))
                     scene_started = now
@@ -114,20 +109,14 @@ def run(port: int, token: str, window_id: str, role: str, index: int = 0) -> Non
                     end_sent = False
             if peer.eof or now - last_seen > HEARTBEAT_TIMEOUT:
                 return
-            if interrupted:
-                interrupted = False
-                if not cancellation_sent:
-                    peer.send({"type": "input", "key": "CTRL_C"})
-                    cancellation_sent = True
-            # Sending Ctrl+C does not close this window. The parent first closes
-            # the whole ending, so cancellation cannot look like a shell close.
             size = terminal_size()
             size_changed = size != rendered_size
-            if (scene is not None and not cancellation_sent and now >= next_frame
+            if (scene is not None and now >= next_frame
                     and (not finished or size_changed or clear_pending)):
                 elapsed = elapsed_offset + now - scene_started
                 if scene == "shell":
-                    screen = render_fake_shell(size, elapsed, context=context, reopened=reopened)
+                    screen = render_fake_shell(size, elapsed, context=context,
+                                               reopened=reopened)
                 elif scene == "crash":
                     screen = render_fake_crash(size, elapsed, context=context)
                 else:
@@ -152,10 +141,7 @@ def run(port: int, token: str, window_id: str, role: str, index: int = 0) -> Non
                 # A pipe can close while the parent is still connected. It is
                 # safe to keep the display alive until shutdown or heartbeat loss.
                 reader = None
-            elif key == "\x03" and not cancellation_sent:
-                peer.send({"type": "input", "key": "CTRL_C"})
-                cancellation_sent = True
-            elif key == END and scene == "shell" and not end_sent and not cancellation_sent:
+            elif key == END and scene == "shell" and not end_sent:
                 peer.send({"type": "input", "key": "END"})
                 end_sent = True
             # All other input is inert: this is a drawing, never a real shell.

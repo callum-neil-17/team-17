@@ -11,6 +11,8 @@ import socket
 from textwrap import dedent, wrap
 
 from callback_art import BOOK_ART, MUG_ART, RECEIPT_ART
+from ending_config import (MAX_PANIC_WINDOWS, PANIC_DURATION as TIMELINE_DURATION,
+                           panic_close, panic_start)
 from levels.level1 import WIZARD
 
 
@@ -143,6 +145,47 @@ def _shell_clue(canvas: _Canvas, row: int, text: str, *, reopened: int = 0) -> i
     return text_top
 
 
+def _interference(canvas: _Canvas, elapsed: float, intensity: float, seed: int,
+                  *, top: int = 2, bottom: int | None = None) -> None:
+    """Break a few local rows into binary fragments; never flash the whole frame."""
+    bottom = min(canvas.height, canvas.height if bottom is None else bottom)
+    top = max(0, top)
+    if top >= bottom or intensity <= 0:
+        return
+    tick = int(elapsed * 4)
+    fragments = ("01001011 //", "[0x????]", "//REF_LOST", "10110#001", "<NULL>_%")
+    count = 1 + int(min(1.0, intensity) * 5)
+    for index in range(count):
+        row = top + _noise(index, seed, tick) % (bottom - top)
+        column = int(_noise(index, seed + 7, tick) % (canvas.width + 9)) - 4
+        fragment = fragments[_noise(index, seed + 13, tick) % len(fragments)]
+        canvas.put(fragment, column, row, "dim")
+        if intensity > 0.5 and index % 2 == 0:
+            canvas.put("_", (column + len(fragment) + tick) % canvas.width,
+                       top + (row - top + 2) % (bottom - top), "dim")
+
+
+def _tear_rows(canvas: _Canvas, elapsed: float, intensity: float, index: int,
+               *, top: int, bottom: int) -> None:
+    """Misalign small horizontal bands and leave displaced, broken row echoes."""
+    bottom = min(canvas.height, bottom)
+    top = max(1, top)
+    if bottom <= top or intensity <= 0:
+        return
+    tick = int(elapsed * 4)
+    for band in range(1 + int(intensity * 2)):
+        row = top + _noise(index, band, tick) % (bottom - top)
+        source = "".join(canvas.rows[row])
+        shift = (-1 if (tick + band) % 2 else 1) * (2 + index % 3)
+        canvas.rows[row] = [" "] * canvas.width
+        canvas.put(source, shift, row, "dim")
+        # Copy only scattered pieces, so a recognizable figure remains behind
+        # the horizontal tear rather than becoming a second solid silhouette.
+        echo = "".join(char if column % 7 < 3 else " "
+                       for column, char in enumerate(source))
+        canvas.put(echo, -shift, min(bottom - 1, row + 1), "dim")
+
+
 def render_fake_shell(size: tuple[int, int], elapsed: float, *,
                       context: dict[str, str], reopened: int = 0,
                       typed: str = "") -> str:
@@ -192,6 +235,8 @@ def render_fake_crash(size: tuple[int, int], elapsed: float, *,
             canvas.put(" " * canvas.width, 0, clue_top + 1 + line_index)
             canvas.put("".join(damaged), 0, clue_top + 1 + line_index, "wizard")
     if elapsed >= 1.25:
+        _interference(canvas, elapsed, min(1.0, elapsed - 1.1), 53,
+                      top=max(0, canvas.height - 6))
         trace = (
             "Traceback (most recent curse last):",
             '  File "<wizard/curse>", line 0, in keep_alive',
@@ -199,7 +244,7 @@ def render_fake_crash(size: tuple[int, int], elapsed: float, *,
             "ReferenceError: spell owner no longer exists",
             "  while handling WIZARD_UNEXPECTED_END",
             "FATAL: wizard runtime lost its root reference",
-            "[recovery fork requested: 6 copies]",
+            f"[recovery fork requested: {MAX_PANIC_WINDOWS} copies]",
         )
         visible = min(len(trace), 1 + int((elapsed - 1.25) * 5))
         trace_top = max(0, min(clue_top + 4, canvas.height - visible))
@@ -277,6 +322,21 @@ def _panic_picture(canvas: _Canvas, elapsed: float, index: int, duration: float)
     sprite_width = max(map(len, sprite), default=1)
     art_left = max(0, (canvas.width - sprite_width) // 2)
     art_top = max(1, (canvas.height - len(message_lines) - len(sprite)) // 2)
+    footer_top = canvas.height - len(message_lines) - 1
+    if progress >= 0.2:
+        _interference(canvas, elapsed, (progress - 0.2) / 0.8, index + 17,
+                      top=2, bottom=footer_top)
+    if 0.23 <= progress < 0.7:
+        # A displaced outline slips out of sync with its original. Sparse
+        # samples keep it readable and avoid filling the screen with a flash.
+        direction = 1 if (tick + index) % 2 else -1
+        for row, line in enumerate(sprite):
+            if row % 3 != tick % 3:
+                continue
+            ghost = "".join(char if column % 4 < 2 else " "
+                            for column, char in enumerate(line))
+            canvas.put(ghost, art_left + direction * (3 + index % 3),
+                       art_top + row + (index % 2), "dim")
     collapse = max(0.0, min(1.0, (progress - 0.64) / 0.3))
     for row, line in enumerate(sprite):
         if progress >= 0.35 and _noise(row, index, 31) % 100 < (progress - 0.35) * 95:
@@ -296,8 +356,11 @@ def _panic_picture(canvas: _Canvas, elapsed: float, index: int, duration: float)
             target_row, target_left = art_top + row, art_left + shift
         if progress < 0.96:
             canvas.put(line, target_left, target_row, "wizard" if progress < 0.38 else "dim")
+    if progress >= 0.27:
+        _tear_rows(canvas, elapsed, min(1.0, (progress - 0.27) / 0.5), index,
+                   top=art_top, bottom=footer_top)
     _panic_memory(canvas, progress, index, art_left,
-                  canvas.height - len(message_lines) - 1)
+                  footer_top)
     if progress >= 0.88:
         canvas.center("[ no live references ]", max(1, canvas.height // 2), "dim")
     for offset, line in enumerate(message_lines):
@@ -309,28 +372,28 @@ def render_panic(size: tuple[int, int], elapsed: float, *, index: int = 0,
     """One recognizable wizard copy shakes, loses rows, and folds away."""
     canvas, left, top = _canvas(size)
     duration = min(8.0, max(0.1, float(duration)))
-    _panic_picture(canvas, _time(elapsed, duration), int(index) % 6, duration)
+    _panic_picture(canvas, _time(elapsed, duration), int(index) % MAX_PANIC_WINDOWS, duration)
     return _emit(canvas, left, top)
 
 
 def render_fallback_panic(size: tuple[int, int], elapsed: float,
-                          duration: float = 8.0) -> str:
+                          duration: float = TIMELINE_DURATION) -> str:
     """Mirror staggered window births and retirements with overlapping panels."""
     canvas, left, top = _canvas(size)
     duration = min(8.0, max(0.1, float(duration)))
     elapsed = _time(elapsed, duration)
     # The default eight-second timeline matches the desktop controller. Scale
     # the whole schedule together if a caller supplies another total duration.
-    timeline = elapsed * 8.0 / duration
+    timeline = elapsed * TIMELINE_DURATION / duration
     panel_width = min(canvas.width, max(18, min(62, canvas.width * 3 // 4)))
     panel_height = min(canvas.height, max(10, min(32, canvas.height * 4 // 5)))
-    for index in range(6):
-        started = 0.3 * index
-        closes = 5.5 + 0.4 * index
+    for index in range(MAX_PANIC_WINDOWS):
+        started = panic_start(index)
+        closes = panic_close(index)
         if timeline < started or timeline >= closes:
             continue
-        panel_left = (canvas.width - panel_width) * index // 5
-        panel_top = (canvas.height - panel_height) * index // 5
+        panel_left = (canvas.width - panel_width) * index // (MAX_PANIC_WINDOWS - 1)
+        panel_top = (canvas.height - panel_height) * index // (MAX_PANIC_WINDOWS - 1)
         inner = _Canvas(max(1, panel_width - 2), max(1, panel_height - 2))
         _panic_picture(inner, timeline - started, index, closes - started)
         canvas.put("+" + "-" * max(0, panel_width - 2) + "+", panel_left, panel_top, "dim")

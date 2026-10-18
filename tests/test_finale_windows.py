@@ -14,6 +14,8 @@ import unittest
 from unittest.mock import Mock, patch
 
 import ending_windows
+from ending_config import (FIRST_PANIC_CLOSE, MAX_PANIC_WINDOWS, PANIC_CLOSE_STEP,
+                           PANIC_DURATION, PANIC_STAGGER, panic_close, panic_start)
 import fight_windows
 
 
@@ -42,14 +44,33 @@ class EndingCommandTests(unittest.TestCase):
     def test_titles_match_existing_exact_title_actions(self):
         self.assertEqual(ending_windows.ending_title(TOKEN, "s0", "shell"),
                          fight_windows.window_title("player", TOKEN + "_s0"))
-        self.assertEqual(ending_windows.ending_title(TOKEN, "p5", "panic"),
-                         fight_windows.window_title("wizard", TOKEN + "_p5"))
+        self.assertEqual(ending_windows.ending_title(TOKEN, "p9", "panic"),
+                         fight_windows.window_title("wizard", TOKEN + "_p9"))
         for token, window_id, role in [("", "s0", "shell"), ("a" * 126, "s0", "shell"),
                                         ("'; kill", "s0", "shell"), (TOKEN, "s3", "shell"),
-                                        (TOKEN, "p6", "panic"), (TOKEN, "p0", "shell"),
+                                        (TOKEN, "p10", "panic"), (TOKEN, "p0", "shell"),
                                         (TOKEN, "s0", "player")]:
             with self.assertRaises(ValueError):
                 ending_windows.ending_title(token, window_id, role)
+
+    def test_panic_schedule_and_command_indices_share_the_ten_window_limit(self):
+        self.assertEqual(ending_windows.MAX_WINDOWS, MAX_PANIC_WINDOWS)
+        self.assertEqual(MAX_PANIC_WINDOWS, 10)
+        starts = [panic_start(index) for index in range(MAX_PANIC_WINDOWS)]
+        closes = [panic_close(index) for index in range(MAX_PANIC_WINDOWS)]
+        self.assertEqual(starts, [index * PANIC_STAGGER for index in range(MAX_PANIC_WINDOWS)])
+        self.assertEqual(closes, [FIRST_PANIC_CLOSE + index * PANIC_CLOSE_STEP
+                                 for index in range(MAX_PANIC_WINDOWS)])
+        self.assertTrue(all(start < close < PANIC_DURATION for start, close in zip(starts, closes)))
+        command = ending_windows.ending_command(12345, TOKEN, "p9", "panic", 9)
+        self.assertEqual(command[-2:], ["--index", "9"])
+        for index in (-1, 10, True, 1.5):
+            with self.assertRaises(ValueError):
+                ending_windows.ending_command(12345, TOKEN, "p9", "panic", index)
+            with self.assertRaises(ValueError):
+                panic_start(index)
+            with self.assertRaises(ValueError):
+                panic_close(index)
 
     def test_gnome_uses_active_interpreter_project_and_cleans_stale_environment(self):
         executables = {"wmctrl": "/usr/bin/wmctrl", "gnome-terminal": "/usr/bin/gnome-terminal"}
@@ -156,21 +177,21 @@ class EndingManagerTests(unittest.TestCase):
     def idle(self):
         wait_for(lambda: not self.manager._threads)
 
-    def test_six_window_limit_includes_pending_launches(self):
+    def test_ten_window_limit_includes_pending_launches(self):
         entered, release = threading.Event(), threading.Event()
         def pending(*args, **kwargs):
             entered.set()
             release.wait(2)
             return Mock(poll=Mock(return_value=0))
         self.popen.side_effect = pending
-        for index in range(6):
+        for index in range(MAX_PANIC_WINDOWS):
             self.assertTrue(self.manager.launch(f"p{index}", "panic", 12345, TOKEN, index))
         self.assertTrue(entered.wait(1))
         self.assertFalse(self.manager.launch("s0", "shell", 12345, TOKEN))
         self.assertFalse(self.manager.launch("p0", "panic", 12345, TOKEN))
         release.set()
         self.idle()
-        self.assertEqual(self.popen.call_count, 6)
+        self.assertEqual(self.popen.call_count, MAX_PANIC_WINDOWS)
 
     def test_dispatcher_zero_exit_does_not_report_child_closed(self):
         self.assertTrue(self.manager.launch("s0", "shell", 12345, TOKEN))
@@ -228,8 +249,8 @@ class EndingManagerTests(unittest.TestCase):
         self.popen.assert_not_called()
         self.assertEqual(drain(self.manager.events), [("closed", "s0", "")])
 
-    def test_unconfirmed_window_keeps_its_slot_in_the_six_window_cap(self):
-        for index in range(6):
+    def test_unconfirmed_window_keeps_its_slot_in_the_ten_window_cap(self):
+        for index in range(MAX_PANIC_WINDOWS):
             self.manager.launch(f"p{index}", "panic", 12345, TOKEN, index)
         self.idle()
         self.close_owned.return_value = False
@@ -404,10 +425,10 @@ class EndingManagerTests(unittest.TestCase):
             self.assertFalse(ending_windows._same_command(changed, expected))
 
     def test_x11_scatter_uses_exact_owned_title_and_desktop_work_area(self):
-        self.manager.launch("p5", "panic", 12345, TOKEN, 5)
+        self.manager.launch("p9", "panic", 12345, TOKEN, 9)
         self.idle()
-        window = self.manager._windows["p5"]
-        title = ending_windows.ending_title(TOKEN, "p5", "panic")
+        window = self.manager._windows["p9"]
+        title = ending_windows.ending_title(TOKEN, "p9", "panic")
         windows = f"0x01 0 host prefix {title}\n0x02 0 host {title}-extra\n0x03 0 host {title}\n"
         desktop = "0 * DG: 1920x1080 VP: 0,0 WA: 0,30 1920x1050 N/A\n"
         with patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11"}, clear=True), \
@@ -416,8 +437,34 @@ class EndingManagerTests(unittest.TestCase):
              patch.object(ending_windows.shutil, "which", return_value="/bin/wmctrl"), \
              patch.object(fight_windows, "_run", side_effect=[windows, desktop, ""]) as run:
             self.manager._arrange_window(window)
-        self.assertEqual(run.call_args.args[0], ["wmctrl", "-ir", "0x03", "-e", "0,1220,660,700,420"])
+        self.assertEqual(run.call_args.args[0], ["wmctrl", "-ir", "0x03", "-e", "0,0,660,700,420"])
         self.assertTrue(all(call.args[1] == ending_windows._DESKTOP_TIMEOUT for call in run.call_args_list))
+
+    def test_all_ten_scattered_windows_stay_inside_small_and_offset_work_areas(self):
+        self.manager.launch("p9", "panic", 12345, TOKEN, 9)
+        self.idle()
+        window = self.manager._windows["p9"]
+        title = ending_windows.ending_title(TOKEN, "p9", "panic")
+        windows = f"0x03 0 host {title}\n"
+        for left, top, available_width, available_height in ((0, 30, 1920, 1050),
+                                                            (-1920, 25, 1920, 1055),
+                                                            (0, 0, 240, 160)):
+            desktop = (f"0 * DG: 1920x1080 VP: 0,0 WA: {left},{top} "
+                       f"{available_width}x{available_height} N/A\n")
+            for index in range(MAX_PANIC_WINDOWS):
+                window.index = index
+                with self.subTest(area=(left, top, available_width, available_height), index=index), \
+                     patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11"}, clear=True), \
+                     patch.object(ending_windows.platform, "system", return_value="Linux"), \
+                     patch.object(ending_windows.platform, "release", return_value="generic"), \
+                     patch.object(ending_windows.shutil, "which", return_value="/bin/wmctrl"), \
+                     patch.object(fight_windows, "_run", side_effect=[windows, desktop, ""]) as run:
+                    self.manager._arrange_window(window)
+                    _, x, y, width, height = map(int, run.call_args.args[0][-1].split(","))
+                    self.assertGreaterEqual(x, left)
+                    self.assertGreaterEqual(y, top)
+                    self.assertLessEqual(x + width, left + available_width)
+                    self.assertLessEqual(y + height, top + available_height)
 
     def test_authenticated_shell_gets_exact_focus_and_cancelled_window_does_not_move(self):
         self.manager.launch("s0", "shell", 12345, TOKEN)
