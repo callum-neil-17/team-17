@@ -331,7 +331,7 @@ class Level3(Level):
         super().__init__(
             number=3,
             title="Level 3",
-            required_input=("\t",),
+            required_input=("\t","\x14"),
             art=BAR_FRAMES,
             description=fill(
                 "You have entered a bar located on the planet cache. You currently do not have any money",
